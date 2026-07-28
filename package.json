@@ -1,0 +1,11 @@
+{
+  "name": "naya-nava-vyapaar",
+  "version": "1.0.0",
+  "scripts": {
+    "install:all": "cd api-gateway && npm install && cd ../auth-service && npm install && cd ../business-service && npm install && cd ../billing-service && npm install",
+    "start:gateway": "cd api-gateway && npm start",
+    "start:auth": "cd auth-service && npm start",
+    "start:business": "cd business-service && npm start",
+    "start:billing": "cd billing-service && npm start"
+  }
+}
