@@ -6,6 +6,12 @@ const invoiceRepo = () => AppDataSource.getRepository(Invoice);
 
 const generateBillNo = () => `BILL-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
+const getStatus = (received, total) => {
+  if (received <= 0) return "Unpaid";
+  if (received >= total) return "Paid";
+  return "Partially Paid";
+};
+
 const createInvoice = async (req, res) => {
   const queryRunner = AppDataSource.createQueryRunner();
   await queryRunner.connect();
@@ -49,6 +55,7 @@ const createInvoice = async (req, res) => {
       discount: discountVal,
       received: receivedVal,
       balance,
+      status: getStatus(receivedVal, finalTotal),
     });
 
     const savedInvoice = await queryRunner.manager.save(Invoice, invoice);
@@ -102,6 +109,7 @@ const updateReceived = async (req, res) => {
     const received = parseFloat(req.body.received);
     invoice.received = received;
     invoice.balance = parseFloat(invoice.totalPrice) - received;
+    invoice.status = getStatus(received, parseFloat(invoice.totalPrice));
     await invoiceRepo().save(invoice);
     res.json(invoice);
   } catch (err) {

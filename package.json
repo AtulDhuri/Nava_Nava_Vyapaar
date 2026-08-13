@@ -7,10 +7,12 @@
     "start:auth": "cd auth-service && npm start",
     "start:business": "cd business-service && npm start",
     "start:billing": "cd billing-service && npm start",
+    "dev:all": "concurrently --names \"GATEWAY,AUTH,BUSINESS,BILLING\" -c \"bgBlue,bgGreen,bgYellow,bgMagenta\" \"cd api-gateway && npm run dev\" \"cd auth-service && npm run dev\" \"cd business-service && npm run dev\" \"cd billing-service && npm run dev\"",
     "start:all": "concurrently --names \"GATEWAY,AUTH,BUSINESS,BILLING\" -c \"bgBlue,bgGreen,bgYellow,bgMagenta\" \"cd api-gateway && npm start\" \"cd auth-service && npm start\" \"cd business-service && npm start\" \"cd billing-service && npm start\"",
-    "dev:all": "concurrently --names \"GATEWAY,AUTH,BUSINESS,BILLING\" -c \"bgBlue,bgGreen,bgYellow,bgMagenta\" \"cd api-gateway && npm run dev\" \"cd auth-service && npm run dev\" \"cd business-service && npm run dev\" \"cd billing-service && npm run dev\""
+    "prod:all": "cross-env NODE_ENV=production concurrently --names \"GATEWAY,AUTH,BUSINESS,BILLING\" -c \"bgBlue,bgGreen,bgYellow,bgMagenta\" \"cd api-gateway && npm start\" \"cd auth-service && npm start\" \"cd business-service && npm start\" \"cd billing-service && npm start\""
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3"
   }
 }

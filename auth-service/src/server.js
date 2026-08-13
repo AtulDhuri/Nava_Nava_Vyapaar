@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ path: `.env.${process.env.NODE_ENV || "development"}` });
 require("reflect-metadata");
 const express = require("express");
 const { AppDataSource } = require("./config/database");

@@ -13,6 +13,7 @@ const Invoice = new EntitySchema({
     discount: { type: "decimal", precision: 12, scale: 2, default: 0 },
     received: { type: "decimal", precision: 12, scale: 2, default: 0 },
     balance: { type: "decimal", precision: 12, scale: 2, default: 0 },
+    status: { type: "varchar", default: "Unpaid" },
     date: { type: "timestamp", createDate: true },
   },
   relations: {
