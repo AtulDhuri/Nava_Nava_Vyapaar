@@ -14,10 +14,10 @@ app.use((req, res, next) => {
 
 app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
 
-app.use("/api/auth", proxy(process.env.AUTH_SERVICE_URL));
-app.use("/api/businesses", proxy(process.env.BUSINESS_SERVICE_URL));
-app.use("/api/products", proxy(process.env.BUSINESS_SERVICE_URL));
-app.use("/api/invoices", proxy(process.env.BILLING_SERVICE_URL));
+app.use("/api/auth", proxy(process.env.AUTH_SERVICE_URL, { parseReqBody: false }));
+app.use("/api/businesses", proxy(process.env.BUSINESS_SERVICE_URL, { parseReqBody: false }));
+app.use("/api/products", proxy(process.env.BUSINESS_SERVICE_URL, { parseReqBody: false }));
+app.use("/api/invoices", proxy(process.env.BILLING_SERVICE_URL, { parseReqBody: false }));
 
 app.use((req, res) => res.status(404).json({ message: "Route not found" }));
 
