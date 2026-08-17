@@ -4,6 +4,8 @@ const proxy = require("express-http-proxy");
 
 const app = express();
 
+app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+
 app.use("/api/auth", proxy(process.env.AUTH_SERVICE_URL));
 app.use("/api/businesses", proxy(process.env.BUSINESS_SERVICE_URL));
 app.use("/api/products", proxy(process.env.BUSINESS_SERVICE_URL));

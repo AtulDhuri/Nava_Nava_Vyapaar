@@ -11,7 +11,7 @@ services:
       - key: PORT
         value: 3001
       - key: DATABASE_URL
-        value: postgresql://postgres.ygjfrmzbvgznzdjpdsff:UGQoOCmFRolctC6V@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+        value: postgresql://postgres.ygjfrmzbvgznzdjpdsff:UGQoOCmFRolctC6V@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
       - key: JWT_SECRET
         value: afb0e06e2e3032569677a86776dd9b5c8525ab6d8a04b3eeb8cd28ad645ef36aa456dd94cb50eeb80dfde46a1ae898c23d2216770cd8b9305bfec238727ad831
       - key: JWT_REFRESH_SECRET
@@ -31,7 +31,7 @@ services:
       - key: PORT
         value: 3002
       - key: DATABASE_URL
-        value: postgresql://postgres.ygjfrmzbvgznzdjpdsff:UGQoOCmFRolctC6V@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+        value: postgresql://postgres.ygjfrmzbvgznzdjpdsff:UGQoOCmFRolctC6V@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
       - key: JWT_SECRET
         value: afb0e06e2e3032569677a86776dd9b5c8525ab6d8a04b3eeb8cd28ad645ef36aa456dd94cb50eeb80dfde46a1ae898c23d2216770cd8b9305bfec238727ad831
       - key: JWT_REFRESH_SECRET
@@ -49,7 +49,7 @@ services:
       - key: PORT
         value: 3003
       - key: DATABASE_URL
-        value: postgresql://postgres.ygjfrmzbvgznzdjpdsff:UGQoOCmFRolctC6V@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+        value: postgresql://postgres.ygjfrmzbvgznzdjpdsff:UGQoOCmFRolctC6V@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
       - key: JWT_SECRET
         value: afb0e06e2e3032569677a86776dd9b5c8525ab6d8a04b3eeb8cd28ad645ef36aa456dd94cb50eeb80dfde46a1ae898c23d2216770cd8b9305bfec238727ad831
       - key: JWT_REFRESH_SECRET
