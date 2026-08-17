@@ -67,17 +67,8 @@ services:
       - key: PORT
         value: 3000
       - key: AUTH_SERVICE_URL
-        fromService:
-          name: auth-service
-          type: web
-          property: hostport
+        value: https://auth-service-015z.onrender.com
       - key: BUSINESS_SERVICE_URL
-        fromService:
-          name: business-service
-          type: web
-          property: hostport
+        value: https://nava-nava-vyapaar.onrender.com
       - key: BILLING_SERVICE_URL
-        fromService:
-          name: billing-service
-          type: web
-          property: hostport
+        value: https://billing-service-td7u.onrender.com
