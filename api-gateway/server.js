@@ -1,4 +1,6 @@
-require("dotenv").config({ path: `.env.${process.env.NODE_ENV || "development"}` });
+// Load environment configuration with fallback support
+const { loadEnvironmentConfig } = require("./utils/envLoader");
+loadEnvironmentConfig();
 const express = require("express");
 const proxy = require("express-http-proxy");
 
@@ -12,14 +14,22 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+app.get("/health", (req, res) => res.status(200).json({ 
+  status: "success", 
+  statusMessage: "Health check successful", 
+  displayMessage: "API Gateway is running normally" 
+}));
 
 app.use("/api/auth", proxy(process.env.AUTH_SERVICE_URL, { parseReqBody: false, proxyReqPathResolver: (req) => `/api/auth${req.url}` }));
 app.use("/api/businesses", proxy(process.env.BUSINESS_SERVICE_URL, { parseReqBody: false, proxyReqPathResolver: (req) => `/api/businesses${req.url}` }));
 app.use("/api/products", proxy(process.env.BUSINESS_SERVICE_URL, { parseReqBody: false, proxyReqPathResolver: (req) => `/api/products${req.url}` }));
 app.use("/api/invoices", proxy(process.env.BILLING_SERVICE_URL, { parseReqBody: false, proxyReqPathResolver: (req) => `/api/invoices${req.url}` }));
 
-app.use((req, res) => res.status(404).json({ message: "Route not found" }));
+app.use((req, res) => res.status(404).json({ 
+  status: "error", 
+  statusMessage: "Route not found", 
+  displayMessage: "The requested endpoint does not exist" 
+}));
 
 app.listen(process.env.PORT, () =>
   console.log(`API Gateway running on port ${process.env.PORT}`)

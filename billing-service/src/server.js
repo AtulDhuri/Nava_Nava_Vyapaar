@@ -1,8 +1,11 @@
-require("dotenv").config({ path: `.env.${process.env.NODE_ENV || "development"}` });
+// Load environment configuration with fallback support
+const { loadEnvironmentConfig } = require("./utils/envLoader");
+loadEnvironmentConfig();
 require("reflect-metadata");
 const express = require("express");
 const { AppDataSource } = require("./config/database");
 const billingRoutes = require("./routes/billingRoutes");
+const { globalErrorHandler, notFoundHandler } = require("./middleware/errorHandler");
 
 const app = express();
 app.use(express.json());
