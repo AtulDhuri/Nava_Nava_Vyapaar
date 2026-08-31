@@ -1,9 +1,12 @@
-require("dotenv").config({ path: `.env.${process.env.NODE_ENV || "development"}` });
+// Load environment configuration with fallback support
+const { loadEnvironmentConfig } = require("./utils/envLoader");
+loadEnvironmentConfig();
 require("reflect-metadata");
 const express = require("express");
 const { AppDataSource } = require("./config/database");
 const authRoutes = require("./routes/authRoutes");
 const { verifyToken } = require("./middleware/authMiddleware");
+const { globalErrorHandler, notFoundHandler } = require("./middleware/errorHandler");
 const jwt = require("jsonwebtoken");
 
 const app = express();
@@ -22,14 +25,34 @@ app.use("/api/auth", authRoutes);
 app.get("/api/auth/verify", (req, res) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-  if (!token) return res.status(401).json({ valid: false });
+  if (!token) return res.status(401).json({ 
+    status: "error",
+    statusMessage: "Token required",
+    displayMessage: "Authentication token is required",
+    valid: false 
+  });
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({ valid: true, user: decoded });
+    res.json({ 
+      status: "success",
+      statusMessage: "Token verified successfully",
+      displayMessage: "Authentication verified",
+      valid: true, 
+      user: decoded 
+    });
   } catch {
-    res.status(403).json({ valid: false });
+    res.status(403).json({ 
+      status: "error",
+      statusMessage: "Invalid or expired token",
+      displayMessage: "Please login again",
+      valid: false 
+    });
   }
 });
+
+// Add global error handlers
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 AppDataSource.initialize()
   .then(() => {

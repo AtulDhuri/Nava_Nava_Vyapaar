@@ -1,6 +1,7 @@
 const { AppDataSource } = require("../config/database");
 const { Invoice } = require("../models/Invoice");
 const { InvoiceItem } = require("../models/InvoiceItem");
+const { successResponse, errorResponse, getResponse } = require("../utils/responseHandler");
 
 const invoiceRepo = () => AppDataSource.getRepository(Invoice);
 
@@ -19,8 +20,9 @@ const createInvoice = async (req, res) => {
   try {
     const { customerName, customerMobile, customerAddress, items, discount, received } = req.body;
 
-    if (!customerName || !items?.length)
-      return res.status(400).json({ message: "customerName and items are required" });
+    if (!customerName || !items?.length) {
+      return errorResponse(res, "customerName and items are required", "Please provide customer name and at least one item", 400);
+    }
 
     let totalPrice = 0;
 
@@ -67,10 +69,16 @@ const createInvoice = async (req, res) => {
     await queryRunner.manager.save(InvoiceItem, itemsWithInvoice);
 
     await queryRunner.commitTransaction();
-    res.status(201).json({ ...savedInvoice, items: itemsWithInvoice });
+    
+    return res.status(201).json({
+      status: "success",
+      statusMessage: "Invoice created successfully",
+      displayMessage: `Invoice ${savedInvoice.billNo} created successfully`,
+      invoice: { ...savedInvoice, items: itemsWithInvoice }
+    });
   } catch (err) {
     await queryRunner.rollbackTransaction();
-    res.status(500).json({ message: err.message });
+    return errorResponse(res, err.message, "Failed to create invoice");
   } finally {
     await queryRunner.release();
   }
@@ -82,9 +90,34 @@ const getInvoices = async (req, res) => {
     const query = invoiceRepo().createQueryBuilder("invoice");
     if (status) query.where("invoice.status = :status", { status });
     query.orderBy("invoice.date", "DESC");
-    res.json(await query.getMany());
+    
+    const invoices = await query.getMany();
+    
+    if (invoices.length === 0) {
+      const noRecordsMessage = status 
+        ? `No invoices found with status "${status}"` 
+        : "No invoices found. Create your first invoice to get started!";
+        
+      return res.status(200).json({
+        status: "success",
+        statusMessage: "Invoices retrieved successfully",
+        displayMessage: noRecordsMessage,
+        invoices: []
+      });
+    } else {
+      const withRecordsMessage = status 
+        ? `Found ${invoices.length} invoice(s) with status "${status}"` 
+        : "Your invoices are ready to view";
+        
+      return res.status(200).json({
+        status: "success",
+        statusMessage: "Invoices retrieved successfully", 
+        displayMessage: withRecordsMessage,
+        invoices: invoices
+      });
+    }
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return errorResponse(res, err.message, "Failed to retrieve invoices");
   }
 };
 
@@ -94,26 +127,43 @@ const getInvoiceById = async (req, res) => {
       where: { id: parseInt(req.params.id) },
       relations: ["items"],
     });
-    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
-    res.json(invoice);
+    
+    if (!invoice) {
+      return errorResponse(res, "Invoice not found", "The requested invoice could not be found", 404);
+    }
+    
+    return res.status(200).json({
+      status: "success",
+      statusMessage: "Invoice retrieved successfully",
+      displayMessage: "Invoice details retrieved",
+      invoice: invoice
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return errorResponse(res, err.message, "Failed to retrieve invoice");
   }
 };
 
 const updateReceived = async (req, res) => {
   try {
     const invoice = await invoiceRepo().findOneBy({ id: parseInt(req.params.id) });
-    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+    if (!invoice) {
+      return errorResponse(res, "Invoice not found", "The requested invoice could not be found", 404);
+    }
 
     const received = parseFloat(req.body.received);
     invoice.received = received;
     invoice.balance = parseFloat(invoice.totalPrice) - received;
     invoice.status = getStatus(received, parseFloat(invoice.totalPrice));
     await invoiceRepo().save(invoice);
-    res.json(invoice);
+    
+    return res.status(200).json({
+      status: "success",
+      statusMessage: "Payment updated successfully",
+      displayMessage: `Payment of ₹${received} recorded successfully`,
+      invoice: invoice
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return errorResponse(res, err.message, "Failed to update payment");
   }
 };
 
