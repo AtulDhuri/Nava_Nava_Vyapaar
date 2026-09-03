@@ -6,6 +6,7 @@ require("reflect-metadata");
 const express = require("express");
 const { AppDataSource } = require("./config/database");
 const billingRoutes = require("./routes/billingRoutes");
+const { globalErrorHandler, notFoundHandler } = require("./middleware/errorHandler");
 
 const app = express();
 app.use(express.json());
