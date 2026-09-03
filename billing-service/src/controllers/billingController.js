@@ -5,7 +5,13 @@ const { successResponse, errorResponse, getResponse } = require("../utils/respon
 
 const invoiceRepo = () => AppDataSource.getRepository(Invoice);
 
-const generateBillNo = () => `BILL-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+const generateBillNo = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `INV-${yyyy}-${mm}-${dd}-${now.getTime()}`;
+};
 
 const getStatus = (received, total) => {
   if (received <= 0) return "Unpaid";
