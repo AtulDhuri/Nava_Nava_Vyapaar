@@ -6,19 +6,22 @@ const productRepo = () => AppDataSource.getRepository(Product);
 
 const addProduct = async (req, res) => {
   try {
-    const { productCode, name, category, price, uom, gstRate } = req.body;
-    if (!productCode || !name || !price || !uom || gstRate === undefined) {
-      return errorResponse(res, "productCode, name, price, uom and gstRate are required", "Please fill all required fields", 400);
+    const products = Array.isArray(req.body) ? req.body : [req.body];
+
+    for (const item of products) {
+      if (!item.productCode || !item.name || !item.price || !item.uom || item.gstRate === undefined) {
+        return errorResponse(res, "productCode, name, price, uom and gstRate are required", "Please fill all required fields", 400);
+      }
     }
 
-    const product = productRepo().create({ productCode, name, category, price, uom, gstRate });
-    await productRepo().save(product);
-    
+    const created = productRepo().create(products);
+    const saved = await productRepo().save(created);
+
     return res.status(201).json({
       status: "success",
-      statusMessage: "Product added successfully",
-      displayMessage: `Product ${product.name} added successfully`,
-      product: product
+      statusMessage: "Product(s) added successfully",
+      displayMessage: `${saved.length} product(s) added successfully`,
+      products: saved
     });
   } catch (err) {
     return errorResponse(res, err.message, "Failed to add product");
