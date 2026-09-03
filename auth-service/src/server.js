@@ -1,6 +1,7 @@
-// Load environment configuration with fallback support
-const { loadEnvironmentConfig } = require("./utils/envLoader");
-loadEnvironmentConfig();
+// Production (Render): NODE_ENV=production loads .env.prod (Supabase)
+// Local: NODE_ENV=development loads .env (local PostgreSQL)
+const envFile = process.env.NODE_ENV === "production" ? ".env.prod" : ".env";
+require("dotenv").config({ path: envFile });
 require("reflect-metadata");
 const express = require("express");
 const { AppDataSource } = require("./config/database");
