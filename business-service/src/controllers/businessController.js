@@ -11,7 +11,7 @@ const addBusiness = async (req, res) => {
       return errorResponse(res, "Business name required", "Please provide business name", 400);
     }
 
-    const business = businessRepo().create({ name, address, gstNumber, contactNumber });
+    const business = businessRepo().create({ userId: req.user.userId, name, address, gstNumber, contactNumber });
     await businessRepo().save(business);
     
     return res.status(201).json({
@@ -27,7 +27,7 @@ const addBusiness = async (req, res) => {
 
 const getBusinesses = async (req, res) => {
   try {
-    const businesses = await businessRepo().find();
+    const businesses = await businessRepo().findBy({ userId: req.user.userId });
     
     if (businesses.length === 0) {
       return res.status(200).json({
@@ -51,7 +51,7 @@ const getBusinesses = async (req, res) => {
 
 const updateBusiness = async (req, res) => {
   try {
-    const business = await businessRepo().findOneBy({ id: parseInt(req.params.id) });
+    const business = await businessRepo().findOneBy({ id: parseInt(req.params.id), userId: req.user.userId });
     if (!business) {
       return errorResponse(res, "Business not found", "The requested business could not be found", 404);
     }

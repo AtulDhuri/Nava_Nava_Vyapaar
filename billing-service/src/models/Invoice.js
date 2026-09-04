@@ -5,6 +5,7 @@ const Invoice = new EntitySchema({
   tableName: "invoices",
   columns: {
     id: { primary: true, type: "int", generated: true },
+    businessId: { type: "int" },
     billNo: { type: "varchar", unique: true },
     customerName: { type: "varchar" },
     customerMobile: { type: "varchar", nullable: true },
