@@ -170,31 +170,56 @@ const getInvoiceById = async (req, res) => {
 const updateReceived = async (req, res) => {
   try {
     const { businessId } = req.query;
+    if (!businessId) return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
 
-    if (!businessId) {
-      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    const items = Array.isArray(req.body) ? req.body : [req.body];
+    const updated = [];
+
+    for (const item of items) {
+      if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each invoice", 400);
+      const invoice = await invoiceRepo().findOneBy({ id: parseInt(item.id), businessId: parseInt(businessId) });
+      if (!invoice) return errorResponse(res, `Invoice ${item.id} not found`, "One or more invoices could not be found", 404);
+      const received = parseFloat(item.received);
+      invoice.received = received;
+      invoice.balance = parseFloat(invoice.totalPrice) - received;
+      invoice.status = getStatus(received, parseFloat(invoice.totalPrice));
+      updated.push(await invoiceRepo().save(invoice));
     }
 
-    const invoice = await invoiceRepo().findOneBy({ id: parseInt(req.params.id), businessId: parseInt(businessId) });
-    if (!invoice) {
-      return errorResponse(res, "Invoice not found", "The requested invoice could not be found", 404);
-    }
-
-    const received = parseFloat(req.body.received);
-    invoice.received = received;
-    invoice.balance = parseFloat(invoice.totalPrice) - received;
-    invoice.status = getStatus(received, parseFloat(invoice.totalPrice));
-    await invoiceRepo().save(invoice);
-    
     return res.status(200).json({
       status: "success",
-      statusMessage: "Payment updated successfully",
-      displayMessage: `Payment of ₹${received} recorded successfully`,
-      invoice: invoice
+      statusMessage: "Payment(s) updated successfully",
+      displayMessage: `${updated.length} payment(s) updated successfully`,
+      invoices: updated
     });
   } catch (err) {
     return errorResponse(res, err.message, "Failed to update payment");
   }
 };
 
-module.exports = { createInvoice, getInvoices, getInvoiceById, updateReceived };
+const deleteInvoice = async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    if (!businessId) return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+
+    const invoice = await invoiceRepo().findOne({
+      where: { id: parseInt(req.params.id), businessId: parseInt(businessId) },
+      relations: ["items"],
+    });
+    if (!invoice) return errorResponse(res, "Invoice not found", "The requested invoice could not be found", 404);
+
+    const billNo = invoice.billNo;
+    await invoiceRepo().remove(invoice);
+
+    return res.status(200).json({
+      status: "success",
+      statusMessage: "Invoice deleted successfully",
+      displayMessage: `Invoice ${billNo} deleted successfully`,
+      deletedBillNo: billNo
+    });
+  } catch (err) {
+    return errorResponse(res, err.message, "Failed to delete invoice");
+  }
+};
+
+module.exports = { createInvoice, getInvoices, getInvoiceById, updateReceived, deleteInvoice };

@@ -83,23 +83,24 @@ const getProducts = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { businessId } = req.query;
-    if (!businessId) {
-      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    if (!businessId) return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+
+    const items = Array.isArray(req.body) ? req.body : [req.body];
+    const updated = [];
+
+    for (const item of items) {
+      if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each product", 400);
+      const product = await productRepo().findOneBy({ id: parseInt(item.id), businessId: parseInt(businessId) });
+      if (!product) return errorResponse(res, `Product ${item.id} not found`, "One or more products could not be found", 404);
+      productRepo().merge(product, item);
+      updated.push(await productRepo().save(product));
     }
 
-    const product = await productRepo().findOneBy({ id: parseInt(req.params.id), businessId: parseInt(businessId) });
-    if (!product) {
-      return errorResponse(res, "Product not found", "The requested product could not be found", 404);
-    }
-
-    productRepo().merge(product, req.body);
-    await productRepo().save(product);
-    
     return res.status(200).json({
       status: "success",
-      statusMessage: "Product updated successfully",
-      displayMessage: `Product ${product.name} updated successfully`,
-      product: product
+      statusMessage: "Product(s) updated successfully",
+      displayMessage: `${updated.length} product(s) updated successfully`,
+      products: updated
     });
   } catch (err) {
     return errorResponse(res, err.message, "Failed to update product");
@@ -109,23 +110,24 @@ const updateProduct = async (req, res) => {
 const deleteProduct = async (req, res) => {
   try {
     const { businessId } = req.query;
-    if (!businessId) {
-      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    if (!businessId) return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+
+    const items = Array.isArray(req.body) ? req.body : [req.body];
+    const deleted = [];
+
+    for (const item of items) {
+      if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each product", 400);
+      const product = await productRepo().findOneBy({ id: parseInt(item.id), businessId: parseInt(businessId) });
+      if (!product) return errorResponse(res, `Product ${item.id} not found`, "One or more products could not be found", 404);
+      deleted.push(product.name);
+      await productRepo().remove(product);
     }
 
-    const product = await productRepo().findOneBy({ id: parseInt(req.params.id), businessId: parseInt(businessId) });
-    if (!product) {
-      return errorResponse(res, "Product not found", "The requested product could not be found", 404);
-    }
-
-    const productName = product.name;
-    await productRepo().remove(product);
-    
     return res.status(200).json({
       status: "success",
-      statusMessage: "Product deleted successfully",
-      displayMessage: `Product ${productName} deleted successfully`,
-      deletedProduct: productName
+      statusMessage: "Product(s) deleted successfully",
+      displayMessage: `${deleted.length} product(s) deleted successfully`,
+      deletedProducts: deleted
     });
   } catch (err) {
     return errorResponse(res, err.message, "Failed to delete product");
