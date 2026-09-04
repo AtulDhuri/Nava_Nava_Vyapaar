@@ -11,7 +11,7 @@ const addBusiness = async (req, res) => {
       return errorResponse(res, "Business name required", "Please provide business name", 400);
     }
 
-    const business = businessRepo().create({ name, address, gstNumber, contactNumber });
+    const business = businessRepo().create({ userId: req.user.userId, name, address, gstNumber, contactNumber });
     await businessRepo().save(business);
     
     return res.status(201).json({
@@ -27,7 +27,7 @@ const addBusiness = async (req, res) => {
 
 const getBusinesses = async (req, res) => {
   try {
-    const businesses = await businessRepo().find();
+    const businesses = await businessRepo().findBy({ userId: req.user.userId });
     
     if (businesses.length === 0) {
       return res.status(200).json({
@@ -51,19 +51,22 @@ const getBusinesses = async (req, res) => {
 
 const updateBusiness = async (req, res) => {
   try {
-    const business = await businessRepo().findOneBy({ id: parseInt(req.params.id) });
-    if (!business) {
-      return errorResponse(res, "Business not found", "The requested business could not be found", 404);
+    const items = Array.isArray(req.body) ? req.body : [req.body];
+    const updated = [];
+
+    for (const item of items) {
+      if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each business", 400);
+      const business = await businessRepo().findOneBy({ id: parseInt(item.id), userId: req.user.userId });
+      if (!business) return errorResponse(res, `Business ${item.id} not found`, "One or more businesses could not be found", 404);
+      businessRepo().merge(business, item);
+      updated.push(await businessRepo().save(business));
     }
 
-    businessRepo().merge(business, req.body);
-    await businessRepo().save(business);
-    
     return res.status(200).json({
       status: "success",
-      statusMessage: "Business updated successfully",
-      displayMessage: `Business ${business.name} updated successfully`,
-      business: business
+      statusMessage: "Business(es) updated successfully",
+      displayMessage: `${updated.length} business(es) updated successfully`,
+      businesses: updated
     });
   } catch (err) {
     return errorResponse(res, err.message, "Failed to update business");

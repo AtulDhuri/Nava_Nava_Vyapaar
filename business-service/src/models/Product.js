@@ -5,6 +5,7 @@ const Product = new EntitySchema({
   tableName: "products",
   columns: {
     id: { primary: true, type: "int", generated: true },
+    businessId: { type: "int" },
     productCode: { type: "varchar", unique: true },
     name: { type: "varchar" },
     category: { type: "varchar", nullable: true },

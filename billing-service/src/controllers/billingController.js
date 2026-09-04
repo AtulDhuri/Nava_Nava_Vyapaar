@@ -24,7 +24,11 @@ const createInvoice = async (req, res) => {
   await queryRunner.connect();
   await queryRunner.startTransaction();
   try {
-    const { customerName, customerMobile, customerAddress, items, discount, received } = req.body;
+    const { businessId, customerName, customerMobile, customerAddress, items, discount, received } = req.body;
+
+    if (!businessId) {
+      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    }
 
     if (!customerName || !items?.length) {
       return errorResponse(res, "customerName and items are required", "Please provide customer name and at least one item", 400);
@@ -55,6 +59,7 @@ const createInvoice = async (req, res) => {
     const balance = finalTotal - receivedVal;
 
     const invoice = queryRunner.manager.create(Invoice, {
+      businessId: parseInt(businessId),
       billNo: generateBillNo(),
       customerName,
       customerMobile,
@@ -92,9 +97,16 @@ const createInvoice = async (req, res) => {
 
 const getInvoices = async (req, res) => {
   try {
-    const { status } = req.query;
-    const query = invoiceRepo().createQueryBuilder("invoice");
-    if (status) query.where("invoice.status = :status", { status });
+    const { status, businessId } = req.query;
+
+    if (!businessId) {
+      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    }
+
+    const query = invoiceRepo().createQueryBuilder("invoice")
+      .where("invoice.businessId = :businessId", { businessId: parseInt(businessId) });
+
+    if (status) query.andWhere("invoice.status = :status", { status });
     query.orderBy("invoice.date", "DESC");
     
     const invoices = await query.getMany();
@@ -129,8 +141,14 @@ const getInvoices = async (req, res) => {
 
 const getInvoiceById = async (req, res) => {
   try {
+    const { businessId } = req.query;
+
+    if (!businessId) {
+      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    }
+
     const invoice = await invoiceRepo().findOne({
-      where: { id: parseInt(req.params.id) },
+      where: { id: parseInt(req.params.id), businessId: parseInt(businessId) },
       relations: ["items"],
     });
     
@@ -151,26 +169,57 @@ const getInvoiceById = async (req, res) => {
 
 const updateReceived = async (req, res) => {
   try {
-    const invoice = await invoiceRepo().findOneBy({ id: parseInt(req.params.id) });
-    if (!invoice) {
-      return errorResponse(res, "Invoice not found", "The requested invoice could not be found", 404);
+    const { businessId } = req.query;
+    if (!businessId) return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+
+    const items = Array.isArray(req.body) ? req.body : [req.body];
+    const updated = [];
+
+    for (const item of items) {
+      if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each invoice", 400);
+      const invoice = await invoiceRepo().findOneBy({ id: parseInt(item.id), businessId: parseInt(businessId) });
+      if (!invoice) return errorResponse(res, `Invoice ${item.id} not found`, "One or more invoices could not be found", 404);
+      const received = parseFloat(item.received);
+      invoice.received = received;
+      invoice.balance = parseFloat(invoice.totalPrice) - received;
+      invoice.status = getStatus(received, parseFloat(invoice.totalPrice));
+      updated.push(await invoiceRepo().save(invoice));
     }
 
-    const received = parseFloat(req.body.received);
-    invoice.received = received;
-    invoice.balance = parseFloat(invoice.totalPrice) - received;
-    invoice.status = getStatus(received, parseFloat(invoice.totalPrice));
-    await invoiceRepo().save(invoice);
-    
     return res.status(200).json({
       status: "success",
-      statusMessage: "Payment updated successfully",
-      displayMessage: `Payment of ₹${received} recorded successfully`,
-      invoice: invoice
+      statusMessage: "Payment(s) updated successfully",
+      displayMessage: `${updated.length} payment(s) updated successfully`,
+      invoices: updated
     });
   } catch (err) {
     return errorResponse(res, err.message, "Failed to update payment");
   }
 };
 
-module.exports = { createInvoice, getInvoices, getInvoiceById, updateReceived };
+const deleteInvoice = async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    if (!businessId) return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+
+    const invoice = await invoiceRepo().findOne({
+      where: { id: parseInt(req.params.id), businessId: parseInt(businessId) },
+      relations: ["items"],
+    });
+    if (!invoice) return errorResponse(res, "Invoice not found", "The requested invoice could not be found", 404);
+
+    const billNo = invoice.billNo;
+    await invoiceRepo().remove(invoice);
+
+    return res.status(200).json({
+      status: "success",
+      statusMessage: "Invoice deleted successfully",
+      displayMessage: `Invoice ${billNo} deleted successfully`,
+      deletedBillNo: billNo
+    });
+  } catch (err) {
+    return errorResponse(res, err.message, "Failed to delete invoice");
+  }
+};
+
+module.exports = { createInvoice, getInvoices, getInvoiceById, updateReceived, deleteInvoice };
