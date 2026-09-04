@@ -7,6 +7,11 @@ const productRepo = () => AppDataSource.getRepository(Product);
 const addProduct = async (req, res) => {
   try {
     const products = Array.isArray(req.body) ? req.body : [req.body];
+    const { businessId } = req.query;
+
+    if (!businessId) {
+      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    }
 
     for (const item of products) {
       if (!item.productCode || !item.name || !item.price || !item.uom || item.gstRate === undefined) {
@@ -14,7 +19,7 @@ const addProduct = async (req, res) => {
       }
     }
 
-    const created = productRepo().create(products);
+    const created = productRepo().create(products.map((p) => ({ ...p, businessId: parseInt(businessId) })));
     const saved = await productRepo().save(created);
 
     return res.status(201).json({
@@ -30,10 +35,17 @@ const addProduct = async (req, res) => {
 
 const getProducts = async (req, res) => {
   try {
-    const { search } = req.query;
-    const query = productRepo().createQueryBuilder("product");
+    const { search, businessId } = req.query;
+
+    if (!businessId) {
+      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    }
+
+    const query = productRepo().createQueryBuilder("product")
+      .where("product.businessId = :businessId", { businessId: parseInt(businessId) });
+
     if (search) {
-      query.where("product.name ILIKE :search OR product.productCode ILIKE :search", {
+      query.andWhere("product.name ILIKE :search OR product.productCode ILIKE :search", {
         search: `%${search}%`,
       });
     }
@@ -70,7 +82,12 @@ const getProducts = async (req, res) => {
 
 const updateProduct = async (req, res) => {
   try {
-    const product = await productRepo().findOneBy({ id: parseInt(req.params.id) });
+    const { businessId } = req.query;
+    if (!businessId) {
+      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    }
+
+    const product = await productRepo().findOneBy({ id: parseInt(req.params.id), businessId: parseInt(businessId) });
     if (!product) {
       return errorResponse(res, "Product not found", "The requested product could not be found", 404);
     }
@@ -91,7 +108,12 @@ const updateProduct = async (req, res) => {
 
 const deleteProduct = async (req, res) => {
   try {
-    const product = await productRepo().findOneBy({ id: parseInt(req.params.id) });
+    const { businessId } = req.query;
+    if (!businessId) {
+      return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+    }
+
+    const product = await productRepo().findOneBy({ id: parseInt(req.params.id), businessId: parseInt(businessId) });
     if (!product) {
       return errorResponse(res, "Product not found", "The requested product could not be found", 404);
     }
