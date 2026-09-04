@@ -7,6 +7,6 @@ const router = express.Router();
 router.use(verifyToken);
 router.post("/", addBusiness);
 router.get("/", getBusinesses);
-router.put("/:id", updateBusiness);
+router.put("/", updateBusiness);
 
 module.exports = router;

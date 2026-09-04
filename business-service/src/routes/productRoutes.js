@@ -7,7 +7,7 @@ const router = express.Router();
 router.use(verifyToken);
 router.post("/", addProduct);
 router.get("/", getProducts);
-router.put("/:id", updateProduct);
-router.delete("/:id", deleteProduct);
+router.put("/", updateProduct);
+router.delete("/", deleteProduct);
 
 module.exports = router;
