@@ -58,7 +58,8 @@ const updateBusiness = async (req, res) => {
       if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each business", 400);
       const business = await businessRepo().findOneBy({ id: parseInt(item.id), userId: req.user.userId });
       if (!business) return errorResponse(res, `Business ${item.id} not found`, "One or more businesses could not be found", 404);
-      businessRepo().merge(business, item);
+      const { id, ...updateData } = item;
+      businessRepo().merge(business, updateData);
       updated.push(await businessRepo().save(business));
     }
 
