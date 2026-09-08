@@ -5,6 +5,8 @@ const { successResponse, errorResponse, getResponse } = require("../utils/respon
 
 const invoiceRepo = () => AppDataSource.getRepository(Invoice);
 
+const round2 = (val) => Math.round(parseFloat(val) * 100) / 100;
+
 const generateBillNo = () => {
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -14,8 +16,8 @@ const generateBillNo = () => {
 };
 
 const getStatus = (received, total) => {
-  if (received <= 0) return "Unpaid";
-  if (received >= total) return "Paid";
+  if (round2(received) <= 0) return "Unpaid";
+  if (round2(received) >= round2(total)) return "Paid";
   return "Partially Paid";
 };
 
@@ -37,10 +39,12 @@ const createInvoice = async (req, res) => {
     let totalPrice = 0;
 
     const invoiceItems = items.map((item) => {
-      const itemBase = parseFloat(item.price) * parseInt(item.qty);
-      const itemDiscount = parseFloat(item.discount || 0);
-      const gstAmount = (itemBase - itemDiscount) * (parseFloat(item.gstRate) / 100);
-      const itemTotal = itemBase - itemDiscount + gstAmount;
+      const itemTotal = item.total != null ? parseFloat(item.total) : (() => {
+        const itemBase = parseFloat(item.price) * parseInt(item.qty);
+        const itemDiscountAmt = itemBase * (parseFloat(item.discount || 0) / 100);
+        const gstAmount = (itemBase - itemDiscountAmt) * (parseFloat(item.gstRate) / 100);
+        return itemBase - itemDiscountAmt + gstAmount;
+      })();
       totalPrice += itemTotal;
       return {
         productId: item.productId || null,
@@ -53,10 +57,10 @@ const createInvoice = async (req, res) => {
       };
     });
 
-    const discountVal = parseFloat(discount || 0);
-    const receivedVal = parseFloat(received || 0);
-    const finalTotal = totalPrice - discountVal;
-    const balance = finalTotal - receivedVal;
+    const discountVal = round2(discount || 0);
+    const receivedVal = round2(received || 0);
+    const finalTotal = round2(totalPrice - discountVal);
+    const balance = round2(finalTotal - receivedVal);
 
     const invoice = queryRunner.manager.create(Invoice, {
       businessId: parseInt(businessId),
@@ -179,9 +183,9 @@ const updateReceived = async (req, res) => {
       if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each invoice", 400);
       const invoice = await invoiceRepo().findOneBy({ id: parseInt(item.id), businessId: parseInt(businessId) });
       if (!invoice) return errorResponse(res, `Invoice ${item.id} not found`, "One or more invoices could not be found", 404);
-      const received = parseFloat(item.received);
+      const received = round2(item.received);
       invoice.received = received;
-      invoice.balance = parseFloat(invoice.totalPrice) - received;
+      invoice.balance = round2(parseFloat(invoice.totalPrice) - received);
       invoice.status = getStatus(received, parseFloat(invoice.totalPrice));
       updated.push(await invoiceRepo().save(invoice));
     }
@@ -229,10 +233,12 @@ const updateInvoice = async (req, res) => {
       let totalPrice = 0;
 
       for (const item of items) {
-        const itemBase = parseFloat(item.price) * parseInt(item.qty);
-        const itemDiscount = parseFloat(item.discount || 0);
-        const gstAmount = (itemBase - itemDiscount) * (parseFloat(item.gstRate) / 100);
-        const itemTotal = itemBase - itemDiscount + gstAmount;
+        const itemTotal = item.total != null ? parseFloat(item.total) : (() => {
+          const itemBase = parseFloat(item.price) * parseInt(item.qty);
+          const itemDiscountAmt = itemBase * (parseFloat(item.discount || 0) / 100);
+          const gstAmount = (itemBase - itemDiscountAmt) * (parseFloat(item.gstRate) / 100);
+          return itemBase - itemDiscountAmt + gstAmount;
+        })();
         totalPrice += itemTotal;
 
         const existing = resolveExisting(item);
@@ -248,24 +254,24 @@ const updateInvoice = async (req, res) => {
       const toDelete = invoice.items.filter((i) => !matchedExistingIds.has(i.id));
       if (toDelete.length) await queryRunner.manager.remove(InvoiceItem, toDelete);
 
-      const discountVal = parseFloat(discount ?? invoice.discount);
-      const receivedVal = parseFloat(received ?? invoice.received);
-      const finalTotal = totalPrice - discountVal;
+      const discountVal = round2(discount ?? invoice.discount);
+      const receivedVal = round2(received ?? invoice.received);
+      const finalTotal = round2(totalPrice - discountVal);
       invoice.totalPrice = finalTotal;
       invoice.discount = discountVal;
       invoice.received = receivedVal;
-      invoice.balance = finalTotal - receivedVal;
+      invoice.balance = round2(finalTotal - receivedVal);
       invoice.status = getStatus(receivedVal, finalTotal);
     } else {
       if (received !== undefined) {
-        const receivedVal = parseFloat(received);
+        const receivedVal = round2(received);
         invoice.received = receivedVal;
-        invoice.balance = parseFloat(invoice.totalPrice) - receivedVal;
+        invoice.balance = round2(parseFloat(invoice.totalPrice) - receivedVal);
         invoice.status = getStatus(receivedVal, parseFloat(invoice.totalPrice));
       }
       if (discount !== undefined) {
-        invoice.discount = parseFloat(discount);
-        invoice.balance = parseFloat(invoice.totalPrice) - parseFloat(invoice.received);
+        invoice.discount = round2(discount);
+        invoice.balance = round2(parseFloat(invoice.totalPrice) - parseFloat(invoice.received));
       }
     }
 
