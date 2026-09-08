@@ -23,6 +23,7 @@ const Invoice = new EntitySchema({
       target: "InvoiceItem",
       inverseSide: "invoice",
       cascade: true,
+      orphanRemoval: true,
     },
   },
 });

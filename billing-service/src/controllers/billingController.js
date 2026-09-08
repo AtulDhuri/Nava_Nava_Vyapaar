@@ -197,6 +197,100 @@ const updateReceived = async (req, res) => {
   }
 };
 
+const updateInvoice = async (req, res) => {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+  try {
+    const businessId = req.query.businessId ?? req.body.businessId;
+    if (!businessId) return errorResponse(res, "businessId is required", "Please provide a business ID", 400);
+
+    const invoice = await queryRunner.manager.findOne(Invoice, {
+      where: { id: parseInt(req.params.id), businessId: parseInt(businessId) },
+      relations: ["items"],
+    });
+    if (!invoice) return errorResponse(res, "Invoice not found", "The requested invoice could not be found", 404);
+
+    const { customerName, customerMobile, customerAddress, items, discount, received } = req.body;
+
+    if (customerName !== undefined) invoice.customerName = customerName;
+    if (customerMobile !== undefined) invoice.customerMobile = customerMobile;
+    if (customerAddress !== undefined) invoice.customerAddress = customerAddress;
+
+    if (items?.length) {
+      const matchedExistingIds = new Set();
+
+      const resolveExisting = (item) => {
+        if (item.id) return invoice.items.find((i) => i.id === item.id) ?? null;
+        if (item.productId) return invoice.items.find((i) => parseInt(i.productId) === parseInt(item.productId) && !matchedExistingIds.has(i.id)) ?? null;
+        return null;
+      };
+
+      let totalPrice = 0;
+
+      for (const item of items) {
+        const itemBase = parseFloat(item.price) * parseInt(item.qty);
+        const itemDiscount = parseFloat(item.discount || 0);
+        const gstAmount = (itemBase - itemDiscount) * (parseFloat(item.gstRate) / 100);
+        const itemTotal = itemBase - itemDiscount + gstAmount;
+        totalPrice += itemTotal;
+
+        const existing = resolveExisting(item);
+        if (existing) matchedExistingIds.add(existing.id);
+
+        const entity = existing
+          ? Object.assign(existing, { productId: item.productId ?? existing.productId, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal })
+          : queryRunner.manager.create(InvoiceItem, { productId: item.productId ?? null, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, invoice: { id: invoice.id } });
+
+        await queryRunner.manager.save(InvoiceItem, entity);
+      }
+
+      const toDelete = invoice.items.filter((i) => !matchedExistingIds.has(i.id));
+      if (toDelete.length) await queryRunner.manager.remove(InvoiceItem, toDelete);
+
+      const discountVal = parseFloat(discount ?? invoice.discount);
+      const receivedVal = parseFloat(received ?? invoice.received);
+      const finalTotal = totalPrice - discountVal;
+      invoice.totalPrice = finalTotal;
+      invoice.discount = discountVal;
+      invoice.received = receivedVal;
+      invoice.balance = finalTotal - receivedVal;
+      invoice.status = getStatus(receivedVal, finalTotal);
+    } else {
+      if (received !== undefined) {
+        const receivedVal = parseFloat(received);
+        invoice.received = receivedVal;
+        invoice.balance = parseFloat(invoice.totalPrice) - receivedVal;
+        invoice.status = getStatus(receivedVal, parseFloat(invoice.totalPrice));
+      }
+      if (discount !== undefined) {
+        invoice.discount = parseFloat(discount);
+        invoice.balance = parseFloat(invoice.totalPrice) - parseFloat(invoice.received);
+      }
+    }
+
+    const savedInvoice = await queryRunner.manager.save(Invoice, invoice);
+    await queryRunner.commitTransaction();
+
+    const result = await AppDataSource.getRepository(Invoice).findOne({
+      where: { id: savedInvoice.id },
+      relations: ["items"],
+    });
+
+    return res.status(200).json({
+      status: "success",
+      statusMessage: "Invoice updated successfully",
+      displayMessage: `Invoice ${savedInvoice.billNo} updated successfully`,
+      invoice: result,
+    });
+  } catch (err) {
+    await queryRunner.rollbackTransaction();
+    return errorResponse(res, err.message, "Failed to update invoice");
+  } finally {
+    await queryRunner.release();
+  }
+};
+
 const deleteInvoice = async (req, res) => {
   try {
     const { businessId } = req.query;
@@ -222,4 +316,4 @@ const deleteInvoice = async (req, res) => {
   }
 };
 
-module.exports = { createInvoice, getInvoices, getInvoiceById, updateReceived, deleteInvoice };
+module.exports = { createInvoice, getInvoices, getInvoiceById, updateReceived, updateInvoice, deleteInvoice };
