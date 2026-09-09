@@ -1,6 +1,8 @@
 const jwt = require("jsonwebtoken");
 
 const verifyToken = (req, res, next) => {
+  if (req.headers["x-internal-key"] === process.env.INTERNAL_API_KEY) return next();
+
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
   if (!token) return res.status(401).json({ 

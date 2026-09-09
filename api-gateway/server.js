@@ -30,6 +30,7 @@ app.use("/api/auth", proxy(process.env.AUTH_SERVICE_URL, proxyOpts("/api/auth"))
 app.use("/api/businesses", proxy(process.env.BUSINESS_SERVICE_URL, proxyOpts("/api/businesses")));
 app.use("/api/products", proxy(process.env.BUSINESS_SERVICE_URL, proxyOpts("/api/products")));
 app.use("/api/invoices", proxy(process.env.BILLING_SERVICE_URL, proxyOpts("/api/invoices")));
+app.use("/api/whatsapp", proxy(process.env.WHATSAPP_SERVICE_URL, proxyOpts("/api/whatsapp")));
 
 app.use((req, res) => res.status(404).json({ 
   status: "error", 
