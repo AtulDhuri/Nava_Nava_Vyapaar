@@ -1,6 +1,7 @@
 const { AppDataSource } = require("../config/database");
 const { Product } = require("../models/Product");
 const { successResponse, errorResponse, getResponse } = require("../utils/responseHandler");
+const { getInventoryByProducts } = require("../services/inventoryClient");
 
 const productRepo = () => AppDataSource.getRepository(Product);
 
@@ -52,7 +53,21 @@ const getProducts = async (req, res) => {
     
     const products = await query.getMany();
     
-    if (products.length === 0) {
+    // Fetch inventory data for all products
+    let inventoryData = {};
+    if (products.length > 0) {
+      const productIds = products.map(p => p.id);
+      inventoryData = await getInventoryByProducts(businessId, productIds);
+    }
+    
+    // Add inventory info to each product
+    const productsWithInventory = products.map(product => ({
+      ...product,
+      currentStock: inventoryData[product.id]?.currentStock || 0,
+      lowStock: inventoryData[product.id]?.lowStock || false
+    }));
+    
+    if (productsWithInventory.length === 0) {
       const noRecordsMessage = search 
         ? `No products found matching "${search}"` 
         : "No products available. Start by adding your first product!";
@@ -65,14 +80,14 @@ const getProducts = async (req, res) => {
       });
     } else {
       const withRecordsMessage = search 
-        ? `Found ${products.length} product(s) matching "${search}"` 
+        ? `Found ${productsWithInventory.length} product(s) matching "${search}"` 
         : "Your product catalog is ready";
         
       return res.status(200).json({
         status: "success",
         statusMessage: "Products retrieved successfully",
         displayMessage: withRecordsMessage,
-        products: products
+        products: productsWithInventory
       });
     }
   } catch (err) {

@@ -11,6 +11,7 @@ const Product = new EntitySchema({
     name: { type: "varchar" },
     category: { type: "varchar", nullable: true },
     price: { type: "decimal", precision: 10, scale: 2 },
+    purchasePrice: { type: "decimal", precision: 10, scale: 2, nullable: true },
     uom: { type: "varchar" },
     gstRate: { type: "decimal", precision: 5, scale: 2 },
   },
