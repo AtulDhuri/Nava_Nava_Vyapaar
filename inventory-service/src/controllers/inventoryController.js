@@ -36,6 +36,7 @@ const addInventory = async (req, res) => {
       entries: saved,
     });
   } catch (err) {
+    console.error('Inventory add error:', err); // Added detailed logging
     return errorResponse(res, err.message, "Failed to add inventory — no changes were saved");
   }
 };

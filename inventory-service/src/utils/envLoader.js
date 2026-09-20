@@ -1,5 +1,5 @@
 /**
- * Environment Configuration Loader
+ * Environment Configuration Loader for Inventory Service
  * 
  * This utility handles environment-specific .env file loading with fallback support.
  * It tries to load environment-specific files first (.env.development, .env.production)
@@ -24,10 +24,8 @@ const loadEnvironmentConfig = () => {
     
     // Log critical environment variables (without sensitive data)
     console.log(`🔍 PORT: ${process.env.PORT}`);
-    console.log(`🔍 AUTH_SERVICE_URL: ${process.env.AUTH_SERVICE_URL ? 'SET' : 'NOT SET'}`);
-    console.log(`🔍 BUSINESS_SERVICE_URL: ${process.env.BUSINESS_SERVICE_URL ? 'SET' : 'NOT SET'}`);
-    console.log(`🔍 BILLING_SERVICE_URL: ${process.env.BILLING_SERVICE_URL ? 'SET' : 'NOT SET'}`);
-    console.log(`🔍 INVENTORY_SERVICE_URL: ${process.env.INVENTORY_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+    console.log(`🔍 DATABASE_URL: ${process.env.DATABASE_URL ? 'SET' : 'NOT SET'}`);
+    console.log(`🔍 JWT_SECRET: ${process.env.JWT_SECRET ? 'SET' : 'NOT SET'}`);
     
     return envFile;
   } else {
@@ -41,10 +39,8 @@ const loadEnvironmentConfig = () => {
       
       // Log what system environment variables are available
       console.log(`🔍 System ENV - PORT: ${process.env.PORT || 'NOT SET'}`);
-      console.log(`🔍 System ENV - AUTH_SERVICE_URL: ${process.env.AUTH_SERVICE_URL ? 'SET' : 'NOT SET'}`);
-      console.log(`🔍 System ENV - BUSINESS_SERVICE_URL: ${process.env.BUSINESS_SERVICE_URL ? 'SET' : 'NOT SET'}`);
-      console.log(`🔍 System ENV - BILLING_SERVICE_URL: ${process.env.BILLING_SERVICE_URL ? 'SET' : 'NOT SET'}`);
-      console.log(`🔍 System ENV - INVENTORY_SERVICE_URL: ${process.env.INVENTORY_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+      console.log(`🔍 System ENV - DATABASE_URL: ${process.env.DATABASE_URL ? 'SET' : 'NOT SET'}`);
+      console.log(`🔍 System ENV - JWT_SECRET: ${process.env.JWT_SECRET ? 'SET' : 'NOT SET'}`);
       
       return null;
     }
