@@ -2,6 +2,8 @@ const { AppDataSource } = require("../config/database");
 const { Invoice } = require("../models/Invoice");
 const { InvoiceItem } = require("../models/InvoiceItem");
 const { successResponse, errorResponse, getResponse } = require("../utils/responseHandler");
+const http = require("http");
+const https = require("https");
 
 const invoiceRepo = () => AppDataSource.getRepository(Invoice);
 
@@ -54,6 +56,7 @@ const createInvoice = async (req, res) => {
         discount: item.discount || 0,
         gstRate: item.gstRate,
         total: itemTotal,
+        description: item.description || null,
       };
     });
 
@@ -84,12 +87,76 @@ const createInvoice = async (req, res) => {
     await queryRunner.manager.save(InvoiceItem, itemsWithInvoice);
 
     await queryRunner.commitTransaction();
-    
+
+    // Soft-failure inventory deduction — billing must never be blocked
+    let inventoryDeducted = false;
+    let inventoryError = null;
+
+    try {
+      const inventoryItems = items
+        .filter((item) => item.productId)
+        .map((item) => ({ productId: item.productId, qty: parseInt(item.qty) }));
+
+      if (process.env.INVENTORY_SERVICE_URL && inventoryItems.length > 0) {
+        await new Promise((resolve) => {
+          const payload = JSON.stringify({
+            businessId: parseInt(businessId),
+            billNo: savedInvoice.billNo,
+            items: inventoryItems,
+          });
+
+          const url = new URL(`${process.env.INVENTORY_SERVICE_URL}/internal/deduct-stock`);
+          const transport = url.protocol === "https:" ? https : http;
+
+          const req = transport.request(
+            {
+              hostname: url.hostname,
+              port: url.port || (url.protocol === "https:" ? 443 : 80),
+              path: url.pathname,
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload),
+              },
+              timeout: 3000,
+            },
+            (res) => {
+              res.resume(); // drain response
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                inventoryDeducted = true;
+              } else {
+                inventoryError = `Inventory service returned status ${res.statusCode}`;
+              }
+              resolve();
+            }
+          );
+
+          req.on("timeout", () => {
+            inventoryError = "Inventory service timeout — stock not deducted";
+            req.destroy();
+            resolve();
+          });
+
+          req.on("error", (err) => {
+            inventoryError = err.message || "Inventory service unavailable — stock not deducted";
+            resolve();
+          });
+
+          req.write(payload);
+          req.end();
+        });
+      }
+    } catch (invErr) {
+      inventoryError = invErr.message || "Inventory service unavailable — stock not deducted";
+    }
+
     return res.status(201).json({
       status: "success",
       statusMessage: "Invoice created successfully",
       displayMessage: `Invoice ${savedInvoice.billNo} created successfully`,
-      invoice: { ...savedInvoice, items: itemsWithInvoice }
+      invoice: { ...savedInvoice, items: itemsWithInvoice },
+      inventoryDeducted,
+      ...(inventoryError && { inventoryError }),
     });
   } catch (err) {
     await queryRunner.rollbackTransaction();
@@ -245,8 +312,8 @@ const updateInvoice = async (req, res) => {
         if (existing) matchedExistingIds.add(existing.id);
 
         const entity = existing
-          ? Object.assign(existing, { productId: item.productId ?? existing.productId, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal })
-          : queryRunner.manager.create(InvoiceItem, { productId: item.productId ?? null, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, invoice: { id: invoice.id } });
+          ? Object.assign(existing, { productId: item.productId ?? existing.productId, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, description: item.description || null })
+          : queryRunner.manager.create(InvoiceItem, { productId: item.productId ?? null, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, description: item.description || null, invoice: { id: invoice.id } });
 
         await queryRunner.manager.save(InvoiceItem, entity);
       }

@@ -12,6 +12,7 @@ const InvoiceItem = new EntitySchema({
     discount: { type: "decimal", precision: 10, scale: 2, default: 0 },
     gstRate: { type: "decimal", precision: 5, scale: 2 },
     total: { type: "decimal", precision: 12, scale: 2 },
+    description: { type: "text", nullable: true },
   },
   relations: {
     invoice: {
