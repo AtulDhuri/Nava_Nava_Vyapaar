@@ -22,12 +22,7 @@
 
 6. [ ] Set Environment Variables:
    ```
-   NODE_ENV=production
-   PORT=3004
-   DATABASE_URL=postgresql://postgres.ygjfrmzbvgznzdjpdsff:UGQoOCmFRolctC6V@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
-   JWT_SECRET=afb0e06e2e3032569677a86776dd9b5c8525ab6d8a04b3eeb8cd28ad645ef36aa456dd94cb50eeb80dfde46a1ae898c23d2216770cd8b9305bfec238727ad831
-   JWT_REFRESH_SECRET=c86c2d5a322409c78f5d260bba8c914123b04adc51ba8b774bcdfb58c7e54feabcee0386d5c615d1fc5d4954d059e84c7590db5b068addaf242e2de5ba0cf640
-   ```
+   removed
 
 7. [ ] Click "Create Web Service"
 8. [ ] Wait for deployment to complete
