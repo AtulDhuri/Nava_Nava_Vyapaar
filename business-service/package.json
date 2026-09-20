@@ -7,7 +7,10 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "migration:run": "node -e \"require('./src/config/database').AppDataSource.initialize().then(ds => ds.runMigrations().then(() => process.exit(0))).catch(console.error)\"",
+    "migration:revert": "node -e \"require('./src/config/database').AppDataSource.initialize().then(ds => ds.undoLastMigration().then(() => process.exit(0))).catch(console.error)\"",
+    "migration:check": "node check-migrations.js"
   },
   "dependencies": {
     "dotenv": "^16.0.3",
