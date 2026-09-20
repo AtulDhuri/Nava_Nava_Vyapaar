@@ -18,6 +18,18 @@ const addProduct = async (req, res) => {
       if (!item.productCode || !item.name || !item.price || !item.uom || item.gstRate === undefined) {
         return errorResponse(res, "productCode, name, price, uom and gstRate are required", "Please fill all required fields", 400);
       }
+      
+      // Validate description if provided
+      if (item.description !== undefined && item.description !== null) {
+        if (typeof item.description !== 'string') {
+          return errorResponse(res, "Description must be a string", "Invalid description format", 400);
+        }
+        if (item.description.length > 5000) {
+          return errorResponse(res, "Description cannot exceed 5000 characters", "Description is too long", 400);
+        }
+        // Sanitize description - basic HTML/script tag removal
+        item.description = item.description.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      }
     }
 
     const created = productRepo().create(products.map((p) => ({ ...p, businessId: parseInt(businessId) })));
@@ -46,7 +58,7 @@ const getProducts = async (req, res) => {
       .where("product.businessId = :businessId", { businessId: parseInt(businessId) });
 
     if (search) {
-      query.andWhere("product.name ILIKE :search OR product.productCode ILIKE :search", {
+      query.andWhere("(product.name ILIKE :search OR product.productCode ILIKE :search OR COALESCE(product.description, '') ILIKE :search)", {
         search: `%${search}%`,
       });
     }
@@ -105,6 +117,19 @@ const updateProduct = async (req, res) => {
 
     for (const item of items) {
       if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each product", 400);
+      
+      // Validate description if provided in update
+      if (item.description !== undefined && item.description !== null) {
+        if (typeof item.description !== 'string') {
+          return errorResponse(res, "Description must be a string", "Invalid description format", 400);
+        }
+        if (item.description.length > 5000) {
+          return errorResponse(res, "Description cannot exceed 5000 characters", "Description is too long", 400);
+        }
+        // Sanitize description - basic HTML/script tag removal
+        item.description = item.description.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      }
+      
       const product = await productRepo().findOneBy({ id: parseInt(item.id), businessId: parseInt(businessId) });
       if (!product) return errorResponse(res, `Product ${item.id} not found`, "One or more products could not be found", 404);
       productRepo().merge(product, item);

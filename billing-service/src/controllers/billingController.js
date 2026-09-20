@@ -56,6 +56,7 @@ const createInvoice = async (req, res) => {
         discount: item.discount || 0,
         gstRate: item.gstRate,
         total: itemTotal,
+        description: item.description || null,
       };
     });
 
@@ -311,8 +312,8 @@ const updateInvoice = async (req, res) => {
         if (existing) matchedExistingIds.add(existing.id);
 
         const entity = existing
-          ? Object.assign(existing, { productId: item.productId ?? existing.productId, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal })
-          : queryRunner.manager.create(InvoiceItem, { productId: item.productId ?? null, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, invoice: { id: invoice.id } });
+          ? Object.assign(existing, { productId: item.productId ?? existing.productId, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, description: item.description || null })
+          : queryRunner.manager.create(InvoiceItem, { productId: item.productId ?? null, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, description: item.description || null, invoice: { id: invoice.id } });
 
         await queryRunner.manager.save(InvoiceItem, entity);
       }

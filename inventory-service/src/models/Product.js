@@ -10,6 +10,7 @@ const Product = new EntitySchema({
     productCode: { type: "varchar" },
     name:        { type: "varchar" },
     uom:         { type: "varchar", nullable: true },
+    description: { type: "text", nullable: true },
   },
 });
 
