@@ -5,7 +5,7 @@ const InvoiceItem = new EntitySchema({
   tableName: "invoice_items",
   columns: {
     id: { primary: true, type: "int", generated: true },
-    productId: { type: "int", nullable: true },
+    productId: { type: "varchar", length: 100, nullable: true },
     productName: { type: "varchar" },
     price: { type: "decimal", precision: 10, scale: 2 },
     qty: { type: "int" },

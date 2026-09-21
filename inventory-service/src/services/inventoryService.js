@@ -7,6 +7,7 @@
 const { AppDataSource } = require("../config/database");
 const { Inventory } = require("../models/Inventory");
 const { InventoryTransaction } = require("../models/InventoryTransaction");
+const { validateNumericId, validateAlphanumericId } = require("../utils/validate");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,14 +33,31 @@ const computeIsLowStock = (record) => {
 const upsertRecord = async (manager, entry, transactionType) => {
   const { productId, businessId, quantity, uom, lowStockThreshold, note } = entry;
 
-  let record = await manager.findOne(Inventory, {
-    where: { businessId: parseInt(businessId), productId: parseInt(productId) },
-  });
+  // Validate IDs before database operations - throws descriptive errors if invalid
+  try {
+    var validBusinessId = validateNumericId(businessId, 'businessId');
+    var validProductId = validateAlphanumericId(productId, 'productId');
+  } catch (validationError) {
+    throw new Error(`Validation failed: ${validationError.message}`);
+  }
+
+  console.log('DEBUG upsertRecord:', { validBusinessId, validProductId, transactionType });
+
+  // Get repository from manager (works with both regular repo and queryRunner manager)
+  const repo = manager.getRepository ? manager.getRepository(Inventory) : manager;
+
+  // TypeORM findOne with guaranteed valid where conditions
+  // Use query builder for EntitySchema compatibility
+  let record = await repo
+    .createQueryBuilder('inventory')
+    .where('inventory.businessId = :businessId', { businessId: validBusinessId })
+    .andWhere('inventory.productId = :productId', { productId: validProductId })
+    .getOne();
 
   if (!record) {
-    record = manager.create(Inventory, {
-      businessId: parseInt(businessId),
-      productId: parseInt(productId),
+    record = repo.create({
+      businessId: validBusinessId,
+      productId: validProductId,
       currentStock: parseFloat(quantity),
       lowStockThreshold: lowStockThreshold != null ? parseFloat(lowStockThreshold) : 0,
       uom: uom || null,
@@ -50,11 +68,12 @@ const upsertRecord = async (manager, entry, transactionType) => {
     if (uom !== undefined) record.uom = uom;
   }
 
-  const saved = await manager.save(Inventory, record);
+  const saved = await repo.save(record);
 
-  await manager.insert(InventoryTransaction, {
-    businessId: parseInt(businessId),
-    productId: parseInt(productId),
+  const transactionRepo = repo.manager ? repo.manager.getRepository(InventoryTransaction) : manager.getRepository(InventoryTransaction);
+  await transactionRepo.insert({
+    businessId: validBusinessId,
+    productId: validProductId,
     type: transactionType,
     quantity: parseFloat(quantity),
     referenceId: null,
@@ -101,15 +120,27 @@ const addBulk = async (entries) => {
 
 /** Get all inventory records for a business, with isLowStock computed. */
 const getAll = async (businessId) => {
-  const records = await inventoryRepo().find({ where: { businessId: parseInt(businessId) } });
+  try {
+    var validBusinessId = validateNumericId(businessId, 'businessId');
+  } catch (validationError) {
+    throw new Error(`Validation failed: ${validationError.message}`);
+  }
+
+  const records = await inventoryRepo().find({ where: { businessId: validBusinessId } });
   return records.map((r) => ({ ...r, isLowStock: computeIsLowStock(r) }));
 };
 
 /** Get low-stock records for a business. */
 const getLowStock = async (businessId) => {
+  try {
+    var validBusinessId = validateNumericId(businessId, 'businessId');
+  } catch (validationError) {
+    throw new Error(`Validation failed: ${validationError.message}`);
+  }
+
   return inventoryRepo()
     .createQueryBuilder("inventory")
-    .where("inventory.businessId = :businessId", { businessId: parseInt(businessId) })
+    .where("inventory.businessId = :businessId", { businessId: validBusinessId })
     .andWhere("inventory.lowStockThreshold > 0")
     .andWhere("inventory.currentStock <= inventory.lowStockThreshold")
     .andWhere("inventory.currentStock >= 0")
@@ -118,9 +149,18 @@ const getLowStock = async (businessId) => {
 
 /** Get a single inventory record by (businessId, productId). */
 const getByProduct = async (businessId, productId) => {
-  const record = await inventoryRepo().findOne({
-    where: { businessId: parseInt(businessId), productId: parseInt(productId) },
-  });
+  try {
+    var validBusinessId = validateNumericId(businessId, 'businessId');
+    var validProductId = validateAlphanumericId(productId, 'productId');
+  } catch (validationError) {
+    throw new Error(`Validation failed: ${validationError.message}`);
+  }
+
+  const record = await inventoryRepo()
+    .createQueryBuilder('inventory')
+    .where('inventory.businessId = :businessId', { businessId: validBusinessId })
+    .andWhere('inventory.productId = :productId', { productId: validProductId })
+    .getOne();
   if (!record) return null;
   return { ...record, isLowStock: computeIsLowStock(record) };
 };
@@ -128,9 +168,18 @@ const getByProduct = async (businessId, productId) => {
 /** Update lowStockThreshold on a record found by (businessId, productId). */
 const setThreshold = async (businessId, productId, threshold) => {
   const repo = inventoryRepo();
-  const record = await repo.findOne({
-    where: { businessId: parseInt(businessId), productId: parseInt(productId) },
-  });
+  try {
+    var validBusinessId = validateNumericId(businessId, 'businessId');
+    var validProductId = validateAlphanumericId(productId, 'productId');
+  } catch (validationError) {
+    throw new Error(`Validation failed: ${validationError.message}`);
+  }
+
+  const record = await repo
+    .createQueryBuilder('inventory')
+    .where('inventory.businessId = :businessId', { businessId: validBusinessId })
+    .andWhere('inventory.productId = :productId', { productId: validProductId })
+    .getOne();
   if (!record) return null;
   record.lowStockThreshold = parseFloat(threshold);
   return repo.save(record);
@@ -144,12 +193,20 @@ const setThreshold = async (businessId, productId, threshold) => {
 const updateById = async (businessId, items) => {
   const repo = inventoryRepo();
   const txRepo = transactionRepo();
+  try {
+    var validBusinessId = validateNumericId(businessId, 'businessId');
+  } catch (validationError) {
+    throw new Error(`Validation failed: ${validationError.message}`);
+  }
+
   const updated = [];
 
   for (const item of items) {
-    const record = await repo.findOne({
-      where: { id: parseInt(item.id), businessId: parseInt(businessId) },
-    });
+    const record = await repo
+      .createQueryBuilder('inventory')
+      .where('inventory.id = :id', { id: parseInt(item.id) })
+      .andWhere('inventory.businessId = :businessId', { businessId: validBusinessId })
+      .getOne();
     if (!record) return { notFound: item.id };
 
     const prevStock = parseFloat(record.currentStock);
@@ -161,7 +218,7 @@ const updateById = async (businessId, items) => {
 
     if (item.currentStock != null && parseFloat(item.currentStock) !== prevStock) {
       await txRepo.insert({
-        businessId: parseInt(businessId),
+        businessId: validBusinessId,
         productId: record.productId,
         type: "ADJUSTMENT",
         quantity: Math.abs(parseFloat(item.currentStock) - prevStock),
@@ -182,12 +239,20 @@ const updateById = async (businessId, items) => {
  */
 const deleteById = async (businessId, items) => {
   const repo = inventoryRepo();
+  try {
+    var validBusinessId = validateNumericId(businessId, 'businessId');
+  } catch (validationError) {
+    throw new Error(`Validation failed: ${validationError.message}`);
+  }
+
   const deleted = [];
 
   for (const item of items) {
-    const record = await repo.findOne({
-      where: { id: parseInt(item.id), businessId: parseInt(businessId) },
-    });
+    const record = await repo
+      .createQueryBuilder('inventory')
+      .where('inventory.id = :id', { id: parseInt(item.id) })
+      .andWhere('inventory.businessId = :businessId', { businessId: validBusinessId })
+      .getOne();
     if (!record) return { notFound: item.id };
     await repo.remove(record);
     deleted.push(item.id);
@@ -208,6 +273,17 @@ const deductStock = async (businessId, billNo, items) => {
   try {
     const deducted = [];
     const skipped = [];
+    
+    let validBusinessId;
+    try {
+      validBusinessId = validateNumericId(businessId, 'businessId');
+    } catch (validationError) {
+      throw new Error(`Validation failed: ${validationError.message}`);
+    }
+
+    // Get repositories from queryRunner manager
+    const inventoryRepo = queryRunner.manager.getRepository(Inventory);
+    const transactionRepo = queryRunner.manager.getRepository(InventoryTransaction);
 
     for (const item of items) {
       if (item.productId == null) {
@@ -215,9 +291,19 @@ const deductStock = async (businessId, billNo, items) => {
         continue;
       }
 
-      const record = await queryRunner.manager.findOne(Inventory, {
-        where: { businessId: parseInt(businessId), productId: parseInt(item.productId) },
-      });
+      let validProductId;
+      try {
+        validProductId = validateAlphanumericId(item.productId, 'productId');
+      } catch (validationError) {
+        skipped.push({ productId: item.productId, reason: `Validation failed: ${validationError.message}` });
+        continue;
+      }
+
+      const record = await inventoryRepo
+        .createQueryBuilder('inventory')
+        .where('inventory.businessId = :businessId', { businessId: validBusinessId })
+        .andWhere('inventory.productId = :productId', { productId: validProductId })
+        .getOne();
 
       if (!record) {
         skipped.push({ productId: item.productId, reason: "No inventory record found" });
@@ -226,11 +312,11 @@ const deductStock = async (businessId, billNo, items) => {
 
       const qtyDeducted = parseFloat(item.qty);
       record.currentStock = parseFloat(record.currentStock) - qtyDeducted;
-      await queryRunner.manager.save(Inventory, record);
+      await inventoryRepo.save(record);
 
-      await queryRunner.manager.insert(InventoryTransaction, {
-        businessId: parseInt(businessId),
-        productId: parseInt(item.productId),
+      await transactionRepo.insert({
+        businessId: validBusinessId,
+        productId: validProductId,
         type: "DEDUCT",
         quantity: qtyDeducted,
         referenceId: billNo,
