@@ -21,8 +21,22 @@ app.use((req, res, next) => {
 app.use("/api/invoices", billingRoutes);
 
 AppDataSource.initialize()
-  .then(() => {
+  .then(async () => {
     console.log("Billing DB connected");
+    
+    // Run pending migrations automatically
+    try {
+      const migrations = await AppDataSource.runMigrations();
+      if (migrations.length > 0) {
+        console.log(`Ran ${migrations.length} pending migration(s)`);
+      } else {
+        console.log("No pending migrations");
+      }
+    } catch (migrationError) {
+      console.error("Migration error:", migrationError.message);
+      // Don't fail startup if migrations error - database might be in valid state
+    }
+    
     app.listen(process.env.PORT, () =>
       console.log(`Billing service running on port ${process.env.PORT}`)
     );
