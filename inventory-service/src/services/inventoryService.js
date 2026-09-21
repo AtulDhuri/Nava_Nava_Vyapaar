@@ -306,22 +306,34 @@ const deductStock = async (businessId, billNo, items) => {
         .getOne();
 
       if (!record) {
+        console.warn(`[INVENTORY_LOOKUP_FAILED] No inventory found for businessId=${validBusinessId}, productId=${validProductId}`);
         skipped.push({ productId: item.productId, reason: "No inventory record found" });
         continue;
       }
 
       const qtyDeducted = parseFloat(item.qty);
       record.currentStock = parseFloat(record.currentStock) - qtyDeducted;
-      await inventoryRepo.save(record);
+      
+      try {
+        await inventoryRepo.save(record);
+      } catch (saveErr) {
+        skipped.push({ productId: item.productId, reason: `Failed to update stock: ${saveErr.message}` });
+        continue;
+      }
 
-      await transactionRepo.insert({
-        businessId: validBusinessId,
-        productId: validProductId,
-        type: "DEDUCT",
-        quantity: qtyDeducted,
-        referenceId: billNo,
-        note: null,
-      });
+      try {
+        await transactionRepo.insert({
+          businessId: validBusinessId,
+          productId: validProductId,
+          type: "DEDUCT",
+          quantity: qtyDeducted,
+          referenceId: billNo,
+          note: null,
+        });
+      } catch (insertErr) {
+        // Log warning but don't fail the deduction - transaction record is non-critical
+        console.warn(`[WARNING] Failed to insert transaction record for ${validProductId}:`, insertErr.message);
+      }
 
       deducted.push({ productId: item.productId, qtyDeducted, remainingStock: record.currentStock });
     }
