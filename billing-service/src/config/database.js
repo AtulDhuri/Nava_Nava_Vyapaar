@@ -2,6 +2,7 @@ require("reflect-metadata");
 const { DataSource } = require("typeorm");
 const { Invoice } = require("../models/Invoice");
 const { InvoiceItem } = require("../models/InvoiceItem");
+const { ChangeInvoiceItemProductIdToVarchar1700000000000 } = require("../migrations/1700000000000-ChangeInvoiceItemProductIdToVarchar");
 
 const AppDataSource = new DataSource({
   type: "postgres",
@@ -10,6 +11,7 @@ const AppDataSource = new DataSource({
   synchronize: true,
   logging: false,
   entities: [Invoice, InvoiceItem],
+  migrations: [ChangeInvoiceItemProductIdToVarchar1700000000000],
 });
 
 module.exports = { AppDataSource };

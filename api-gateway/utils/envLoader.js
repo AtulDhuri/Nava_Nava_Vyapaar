@@ -14,10 +14,21 @@ const loadEnvironmentConfig = () => {
   const envFile = `.env.${nodeEnv}`;
   const defaultEnvFile = ".env";
 
+  console.log(`🔍 NODE_ENV: ${nodeEnv}`);
+  console.log(`🔍 Looking for environment file: ${envFile}`);
+
   // Check if environment-specific file exists
   if (fs.existsSync(path.resolve(envFile))) {
     require("dotenv").config({ path: envFile });
     console.log(`✅ Loaded environment config: ${envFile}`);
+    
+    // Log critical environment variables (without sensitive data)
+    console.log(`🔍 PORT: ${process.env.PORT}`);
+    console.log(`🔍 AUTH_SERVICE_URL: ${process.env.AUTH_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+    console.log(`🔍 BUSINESS_SERVICE_URL: ${process.env.BUSINESS_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+    console.log(`🔍 BILLING_SERVICE_URL: ${process.env.BILLING_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+    console.log(`🔍 INVENTORY_SERVICE_URL: ${process.env.INVENTORY_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+    
     return envFile;
   } else {
     // Fallback to default .env file
@@ -27,6 +38,14 @@ const loadEnvironmentConfig = () => {
       return defaultEnvFile;
     } else {
       console.warn("⚠️ No .env file found. Using system environment variables.");
+      
+      // Log what system environment variables are available
+      console.log(`🔍 System ENV - PORT: ${process.env.PORT || 'NOT SET'}`);
+      console.log(`🔍 System ENV - AUTH_SERVICE_URL: ${process.env.AUTH_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+      console.log(`🔍 System ENV - BUSINESS_SERVICE_URL: ${process.env.BUSINESS_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+      console.log(`🔍 System ENV - BILLING_SERVICE_URL: ${process.env.BILLING_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+      console.log(`🔍 System ENV - INVENTORY_SERVICE_URL: ${process.env.INVENTORY_SERVICE_URL ? 'SET' : 'NOT SET'}`);
+      
       return null;
     }
   }
