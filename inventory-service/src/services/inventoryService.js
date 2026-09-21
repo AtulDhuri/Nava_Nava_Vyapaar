@@ -331,7 +331,15 @@ const deductStock = async (businessId, billNo, items) => {
           note: null,
         });
       } catch (insertErr) {
-        // Log warning but don't fail the deduction - transaction record is non-critical
+        // Log detailed error information
+        console.error(`[TRANSACTION_INSERT_ERROR]`, {
+          productId: validProductId,
+          businessId: validBusinessId,
+          error: insertErr.message,
+          errorCode: insertErr.code,
+          errorDetail: insertErr.detail
+        });
+        // Don't fail the deduction - transaction record is non-critical
         console.warn(`[WARNING] Failed to insert transaction record for ${validProductId}:`, insertErr.message);
       }
 
