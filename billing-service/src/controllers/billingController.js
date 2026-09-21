@@ -2,8 +2,7 @@ const { AppDataSource } = require("../config/database");
 const { Invoice } = require("../models/Invoice");
 const { InvoiceItem } = require("../models/InvoiceItem");
 const { successResponse, errorResponse, getResponse } = require("../utils/responseHandler");
-const http = require("http");
-const https = require("https");
+const inventoryClient = require("../services/inventoryClient");
 
 const invoiceRepo = () => AppDataSource.getRepository(Invoice);
 
@@ -14,6 +13,7 @@ const generateBillNo = () => {
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
+  
   return `INV-${yyyy}-${mm}-${dd}-${now.getTime()}`;
 };
 
@@ -97,57 +97,36 @@ const createInvoice = async (req, res) => {
         .filter((item) => item.productId)
         .map((item) => ({ productId: item.productId, qty: parseInt(item.qty) }));
 
-      if (process.env.INVENTORY_SERVICE_URL && inventoryItems.length > 0) {
-        await new Promise((resolve) => {
-          const payload = JSON.stringify({
-            businessId: parseInt(businessId),
-            billNo: savedInvoice.billNo,
-            items: inventoryItems,
-          });
-
-          const url = new URL(`${process.env.INVENTORY_SERVICE_URL}/internal/deduct-stock`);
-          const transport = url.protocol === "https:" ? https : http;
-
-          const req = transport.request(
-            {
-              hostname: url.hostname,
-              port: url.port || (url.protocol === "https:" ? 443 : 80),
-              path: url.pathname,
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload),
-              },
-              timeout: 3000,
-            },
-            (res) => {
-              res.resume(); // drain response
-              if (res.statusCode >= 200 && res.statusCode < 300) {
-                inventoryDeducted = true;
-              } else {
-                inventoryError = `Inventory service returned status ${res.statusCode}`;
-              }
-              resolve();
+      if (inventoryItems.length > 0) {
+        try {
+          const deductionResponse = await inventoryClient.deductStock(parseInt(businessId), savedInvoice.billNo, inventoryItems);
+          
+          // Check if any items were actually deducted (not just skipped)
+          if (deductionResponse && deductionResponse.deducted && deductionResponse.deducted.length > 0) {
+            inventoryDeducted = true;
+            
+            // If there are skipped items, log them but don't fail the invoice
+            if (deductionResponse.skipped && deductionResponse.skipped.length > 0) {
+              const skippedDetails = deductionResponse.skipped
+                .map(s => `${s.productId} (${s.reason})`)
+                .join(', ');
+              inventoryError = `Partial deduction: ${deductionResponse.skipped.length} item(s) could not be deducted: ${skippedDetails}`;
             }
-          );
-
-          req.on("timeout", () => {
-            inventoryError = "Inventory service timeout — stock not deducted";
-            req.destroy();
-            resolve();
-          });
-
-          req.on("error", (err) => {
-            inventoryError = err.message || "Inventory service unavailable — stock not deducted";
-            resolve();
-          });
-
-          req.write(payload);
-          req.end();
-        });
+          } else if (deductionResponse && deductionResponse.skipped && deductionResponse.skipped.length > 0) {
+            // All items were skipped - deduction completely failed
+            const skippedDetails = deductionResponse.skipped
+              .map(s => `${s.productId} (${s.reason})`)
+              .join(', ');
+            inventoryError = `Stock deduction failed: ${deductionResponse.skipped.length} item(s) could not be deducted: ${skippedDetails}`;
+          }
+        } catch (err) {
+          inventoryError = err.message || "Inventory service unavailable — stock not deducted";
+          console.error(`[INVENTORY_DEDUCTION_ERROR] billNo: ${savedInvoice.billNo}, businessId: ${businessId}, error: ${err.message}`);
+        }
       }
     } catch (invErr) {
       inventoryError = invErr.message || "Inventory service unavailable — stock not deducted";
+      console.error(`[INVENTORY_DEDUCTION_ERROR] billNo: ${savedInvoice.billNo}, businessId: ${businessId}, error: ${invErr.message}`);
     }
 
     return res.status(201).json({
