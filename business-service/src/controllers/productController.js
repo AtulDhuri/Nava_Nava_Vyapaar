@@ -1,6 +1,7 @@
 const { AppDataSource } = require("../config/database");
 const { Product } = require("../models/Product");
 const { successResponse, errorResponse, getResponse } = require("../utils/responseHandler");
+const { getInventoryByProducts } = require("../services/inventoryClient");
 
 const productRepo = () => AppDataSource.getRepository(Product);
 
@@ -16,6 +17,18 @@ const addProduct = async (req, res) => {
     for (const item of products) {
       if (!item.productCode || !item.name || !item.price || !item.uom || item.gstRate === undefined) {
         return errorResponse(res, "productCode, name, price, uom and gstRate are required", "Please fill all required fields", 400);
+      }
+      
+      // Validate description if provided
+      if (item.description !== undefined && item.description !== null) {
+        if (typeof item.description !== 'string') {
+          return errorResponse(res, "Description must be a string", "Invalid description format", 400);
+        }
+        if (item.description.length > 5000) {
+          return errorResponse(res, "Description cannot exceed 5000 characters", "Description is too long", 400);
+        }
+        // Sanitize description - basic HTML/script tag removal
+        item.description = item.description.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
       }
     }
 
@@ -45,14 +58,28 @@ const getProducts = async (req, res) => {
       .where("product.businessId = :businessId", { businessId: parseInt(businessId) });
 
     if (search) {
-      query.andWhere("product.name ILIKE :search OR product.productCode ILIKE :search", {
+      query.andWhere("(product.name ILIKE :search OR product.productCode ILIKE :search OR COALESCE(product.description, '') ILIKE :search)", {
         search: `%${search}%`,
       });
     }
     
     const products = await query.getMany();
     
-    if (products.length === 0) {
+    // Fetch inventory data for all products
+    let inventoryData = {};
+    if (products.length > 0) {
+      const productIds = products.map(p => p.id);
+      inventoryData = await getInventoryByProducts(businessId, productIds);
+    }
+    
+    // Add inventory info to each product
+    const productsWithInventory = products.map(product => ({
+      ...product,
+      currentStock: inventoryData[product.id]?.currentStock || 0,
+      lowStock: inventoryData[product.id]?.lowStock || false
+    }));
+    
+    if (productsWithInventory.length === 0) {
       const noRecordsMessage = search 
         ? `No products found matching "${search}"` 
         : "No products available. Start by adding your first product!";
@@ -65,14 +92,14 @@ const getProducts = async (req, res) => {
       });
     } else {
       const withRecordsMessage = search 
-        ? `Found ${products.length} product(s) matching "${search}"` 
+        ? `Found ${productsWithInventory.length} product(s) matching "${search}"` 
         : "Your product catalog is ready";
         
       return res.status(200).json({
         status: "success",
         statusMessage: "Products retrieved successfully",
         displayMessage: withRecordsMessage,
-        products: products
+        products: productsWithInventory
       });
     }
   } catch (err) {
@@ -90,6 +117,19 @@ const updateProduct = async (req, res) => {
 
     for (const item of items) {
       if (!item.id) return errorResponse(res, "id is required for each item", "Please provide id for each product", 400);
+      
+      // Validate description if provided in update
+      if (item.description !== undefined && item.description !== null) {
+        if (typeof item.description !== 'string') {
+          return errorResponse(res, "Description must be a string", "Invalid description format", 400);
+        }
+        if (item.description.length > 5000) {
+          return errorResponse(res, "Description cannot exceed 5000 characters", "Description is too long", 400);
+        }
+        // Sanitize description - basic HTML/script tag removal
+        item.description = item.description.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      }
+      
       const product = await productRepo().findOneBy({ id: parseInt(item.id), businessId: parseInt(businessId) });
       if (!product) return errorResponse(res, `Product ${item.id} not found`, "One or more products could not be found", 404);
       productRepo().merge(product, item);
