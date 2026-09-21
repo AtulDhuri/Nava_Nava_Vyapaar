@@ -37,6 +37,26 @@ app.get("/health", (req, res) => {
   });
 });
 
+// Emergency migration fix endpoint (admin only - should be behind auth in production)
+app.post("/admin/fix-schema", async (req, res) => {
+  try {
+    // Run migrations forcefully
+    const migrations = await AppDataSource.runMigrations({ transaction: 'all' });
+    console.log(`Forcefully ran ${migrations.length} migration(s)`);
+    
+    res.status(200).json({
+      status: "success",
+      statusMessage: "Schema migrations completed",
+      migrationsRun: migrations.length
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      statusMessage: err.message
+    });
+  }
+});
+
 // Database health check
 app.get("/health/db", async (req, res) => {
   try {
