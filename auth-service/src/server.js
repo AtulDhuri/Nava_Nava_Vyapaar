@@ -3,6 +3,13 @@
 const envFile = process.env.NODE_ENV === "production" ? ".env.prod" : ".env";
 require("dotenv").config({ path: envFile });
 require("reflect-metadata");
+
+// Log startup info
+console.log("Starting auth-service...");
+console.log("Environment:", process.env.NODE_ENV || "development");
+console.log("Port:", process.env.PORT);
+console.log("Database URL configured:", !!process.env.DATABASE_URL);
+
 const express = require("express");
 const { AppDataSource } = require("./config/database");
 const authRoutes = require("./routes/authRoutes");
@@ -20,6 +27,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", message: "Auth service is running" });
+});
+
+// Register routes immediately (they will wait for DB on first use)
 app.use("/api/auth", authRoutes);
 
 // Internal token verification endpoint used by other services via gateway
@@ -55,11 +68,19 @@ app.get("/api/auth/verify", (req, res) => {
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
 
-AppDataSource.initialize()
-  .then(() => {
-    console.log("Auth DB connected");
-    app.listen(process.env.PORT, () =>
-      console.log(`Auth service running on port ${process.env.PORT}`)
-    );
-  })
-  .catch((err) => console.error("DB connection failed:", err));
+// Start server and initialize database asynchronously
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, () => {
+  console.log(`Auth service started on port ${PORT}`);
+  
+  // Initialize database in background
+  AppDataSource.initialize()
+    .then(() => {
+      console.log("✓ Auth DB connected successfully");
+    })
+    .catch((err) => {
+      console.error("✗ DB connection failed:", err.message);
+      console.error("Will retry on next request...");
+    });
+});
