@@ -20,6 +20,59 @@ app.get("/health", (req, res) => res.status(200).json({
   displayMessage: "API Gateway is running normally" 
 }));
 
+// Warm-up endpoint: pings every downstream service so they spin up (e.g. Render cold starts)
+// before real API traffic arrives. Hit this once on app launch / splash screen.
+const WARMUP_TARGETS = [
+  { name: "auth", url: process.env.AUTH_SERVICE_URL },
+  { name: "business", url: process.env.BUSINESS_SERVICE_URL },
+  { name: "billing", url: process.env.BILLING_SERVICE_URL },
+  { name: "inventory", url: process.env.INVENTORY_SERVICE_URL },
+];
+
+const pingService = async ({ name, url }) => {
+  if (!url || url === "undefined") {
+    return { name, ok: false, status: "not-configured" };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000); // allow for cold starts
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetch(`${url}/health`, { signal: controller.signal });
+    return {
+      name,
+      ok: response.ok,
+      status: response.status,
+      responseTimeMs: Date.now() - startedAt,
+    };
+  } catch (err) {
+    return {
+      name,
+      ok: false,
+      status: err.name === "AbortError" ? "timeout" : "unreachable",
+      error: err.code || err.message,
+      responseTimeMs: Date.now() - startedAt,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+app.get("/warmup", async (req, res) => {
+  const results = await Promise.all(WARMUP_TARGETS.map(pingService));
+  const allReady = results.every((r) => r.ok);
+
+  res.status(allReady ? 200 : 207).json({
+    status: allReady ? "success" : "partial",
+    statusMessage: allReady ? "All services warmed up" : "Some services are not ready",
+    displayMessage: allReady
+      ? "All services are ready"
+      : "Services are starting up, please wait a moment",
+    services: results,
+  });
+});
+
 // Debug endpoint for environment variables (only show in development)
 app.get("/debug/env", (req, res) => {
   if (process.env.NODE_ENV === 'production') {
