@@ -165,6 +165,54 @@ const getByProduct = async (businessId, productId) => {
   return { ...record, isLowStock: computeIsLowStock(record) };
 };
 
+/**
+ * Get inventory records for MANY products in a single query.
+ * Used by business-service to enrich a product list without firing one HTTP
+ * request per product. Returns a map keyed by productId:
+ *   { [productId]: { currentStock, lowStockThreshold, uom, isLowStock } }
+ * Products with no inventory record are simply absent from the map (the caller
+ * applies its own zero defaults). Invalid productIds are skipped, not fatal.
+ */
+const getByProducts = async (businessId, productIds) => {
+  try {
+    var validBusinessId = validateNumericId(businessId, 'businessId');
+  } catch (validationError) {
+    throw new Error(`Validation failed: ${validationError.message}`);
+  }
+
+  if (!Array.isArray(productIds) || productIds.length === 0) {
+    return {};
+  }
+
+  // Validate/normalize each productId; drop invalid ones instead of failing the batch.
+  const validProductIds = [];
+  for (const pid of productIds) {
+    try {
+      validProductIds.push(validateAlphanumericId(pid, 'productId'));
+    } catch {
+      // skip invalid id — it just won't be enriched
+    }
+  }
+  if (validProductIds.length === 0) return {};
+
+  const records = await inventoryRepo()
+    .createQueryBuilder('inventory')
+    .where('inventory.businessId = :businessId', { businessId: validBusinessId })
+    .andWhere('inventory.productId IN (:...productIds)', { productIds: validProductIds })
+    .getMany();
+
+  const map = {};
+  for (const r of records) {
+    map[r.productId] = {
+      currentStock: r.currentStock,
+      lowStockThreshold: r.lowStockThreshold,
+      uom: r.uom,
+      isLowStock: computeIsLowStock(r),
+    };
+  }
+  return map;
+};
+
 /** Update lowStockThreshold on a record found by (businessId, productId). */
 const setThreshold = async (businessId, productId, threshold) => {
   const repo = inventoryRepo();
@@ -366,6 +414,7 @@ module.exports = {
   getAll,
   getLowStock,
   getByProduct,
+  getByProducts,
   setThreshold,
   updateById,
   deleteById,

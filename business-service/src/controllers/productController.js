@@ -65,18 +65,32 @@ const getProducts = async (req, res) => {
     
     const products = await query.getMany();
     
-    // Fetch inventory data for all products
+    // Fetch inventory data for all products.
+    // Inventory is an ENRICHMENT, never a hard dependency: if the inventory
+    // service is down, unreachable, or has no record for a product, we must
+    // still return the full product list. Any failure here is swallowed and we
+    // fall back to zero-stock defaults so the products endpoint never breaks.
+    // Inventory keys its records by productCode (the SKU, e.g. "P001"), stored
+    // as a varchar. Business-service products use a numeric primary key `id`,
+    // so we must enrich by productCode, not id, or every lookup misses and
+    // stock falls back to 0.
     let inventoryData = {};
     if (products.length > 0) {
-      const productIds = products.map(p => p.id);
-      inventoryData = await getInventoryByProducts(businessId, productIds);
+      try {
+        const productCodes = products.map(p => p.productCode);
+        inventoryData = await getInventoryByProducts(businessId, productCodes);
+      } catch (inventoryErr) {
+        console.warn(`Inventory enrichment failed, returning products without live stock: ${inventoryErr.message}`);
+        inventoryData = {};
+      }
     }
     
-    // Add inventory info to each product
+    // Add inventory info to each product, matching on productCode.
     const productsWithInventory = products.map(product => ({
       ...product,
-      currentStock: inventoryData[product.id]?.currentStock || 0,
-      lowStock: inventoryData[product.id]?.lowStock || false
+      currentStock: inventoryData[product.productCode]?.currentStock || 0,
+      lowStockThreshold: inventoryData[product.productCode]?.lowStockThreshold || 0,
+      lowStock: inventoryData[product.productCode]?.lowStock || false
     }));
     
     if (productsWithInventory.length === 0) {
