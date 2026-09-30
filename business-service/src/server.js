@@ -18,13 +18,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint (registered before DB init so warm-up pings respond immediately)
+// Health check endpoint — fast, side-effect-free liveness route for keep-alive.
+// Registered before DB init and any 404 handler so it always answers 200,
+// even while the DB is still connecting or if the DB is down.
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "success",
     statusMessage: "Business service is running",
     displayMessage: "Business service is healthy",
+    service: "business-service",
     dbConnected: AppDataSource.isInitialized,
+    timestamp: new Date().toISOString(),
   });
 });
 

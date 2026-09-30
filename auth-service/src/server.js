@@ -27,9 +27,15 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
+// Health check endpoint — fast, side-effect-free liveness route for keep-alive.
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", message: "Auth service is running" });
+  res.status(200).json({
+    status: "success",
+    statusMessage: "Auth service is running",
+    displayMessage: "Auth service is healthy",
+    service: "auth-service",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Register routes immediately (they will wait for DB on first use)
