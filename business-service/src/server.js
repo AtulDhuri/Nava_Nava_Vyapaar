@@ -7,6 +7,7 @@ const express = require("express");
 const { AppDataSource } = require("./config/database");
 const businessRoutes = require("./routes/businessRoutes");
 const productRoutes = require("./routes/productRoutes");
+const internalRoutes = require("./routes/internalRoutes");
 
 const app = express();
 app.use(express.json());
@@ -34,6 +35,9 @@ app.get("/health", (req, res) => {
 
 app.use("/api/businesses", businessRoutes);
 app.use("/api/products", productRoutes);
+
+// Internal routes — NO JWT, service-to-service only
+app.use("/internal", internalRoutes);
 
 // Start listening immediately so the service can be warmed up before the DB is ready
 app.listen(process.env.PORT, () =>

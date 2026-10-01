@@ -3,8 +3,37 @@ const { Invoice } = require("../models/Invoice");
 const { InvoiceItem } = require("../models/InvoiceItem");
 const { successResponse, errorResponse, getResponse } = require("../utils/responseHandler");
 const inventoryClient = require("../services/inventoryClient");
+const businessClient = require("../services/businessClient");
 
 const invoiceRepo = () => AppDataSource.getRepository(Invoice);
+
+// A productId is a numeric business-service PK (e.g. "111") rather than a SKU
+// code (e.g. "P001") when it's composed only of digits.
+const isNumericId = (val) => val != null && /^\d+$/.test(String(val).trim());
+
+/**
+ * Resolve the numeric product ids present on invoice items to their productCode
+ * SKUs via business-service, returning a map { [id]: productCode }.
+ *
+ * Only numeric ids are looked up; items that already carry a non-numeric
+ * productCode need no resolution. Best-effort: on failure this returns an empty
+ * map and callers fall back to the raw key, so invoice creation is never blocked.
+ *
+ * @param {number} businessId
+ * @param {Array<Object>} items - raw invoice items from the request
+ * @returns {Promise<Object>} map of productId(string) -> productCode(string)
+ */
+const resolveItemCodes = async (businessId, items) => {
+  const numericIds = [...new Set(
+    items
+      .map((item) => item.productCode ?? item.productId)
+      .filter((key) => isNumericId(key))
+      .map((key) => String(key))
+  )];
+
+  if (numericIds.length === 0) return {};
+  return businessClient.resolveProductCodes(businessId, numericIds);
+};
 
 const round2 = (val) => Math.round(parseFloat(val) * 100) / 100;
 
@@ -38,6 +67,18 @@ const createInvoice = async (req, res) => {
       return errorResponse(res, "customerName and items are required", "Please provide customer name and at least one item", 400);
     }
 
+    // Resolve each item to its inventory SKU/productCode up front. Items may
+    // carry `productCode` directly, or only the numeric product `id` on
+    // `productId` — in which case we batch-resolve ids to codes via
+    // business-service. We store the resolved code on the invoice item so the
+    // invoice stays linked to inventory, and reuse it for stock deduction below.
+    const resolvedCodes = await resolveItemCodes(parseInt(businessId), items);
+    const codeFor = (item) => {
+      const key = item.productCode ?? item.productId;
+      if (key == null || key === "") return null;
+      return isNumericId(key) ? (resolvedCodes[String(key)] ?? key) : key;
+    };
+
     let totalPrice = 0;
 
     const invoiceItems = items.map((item) => {
@@ -49,7 +90,8 @@ const createInvoice = async (req, res) => {
       })();
       totalPrice += itemTotal;
       return {
-        productId: item.productId || null,
+        // Persist the resolved SKU/code so the invoice stays linked to inventory.
+        productId: codeFor(item) ?? null,
         productName: item.productName,
         price: item.price,
         qty: item.qty,
@@ -93,9 +135,11 @@ const createInvoice = async (req, res) => {
     let inventoryError = null;
 
     try {
+      // Reuse the codes already resolved above. Inventory is keyed by SKU, so
+      // each deduction item carries the resolved productCode (not the numeric id).
       const inventoryItems = items
-        .filter((item) => item.productId)
-        .map((item) => ({ productId: item.productId, qty: parseInt(item.qty) }));
+        .map((item) => ({ productId: codeFor(item), qty: parseInt(item.qty) }))
+        .filter((item) => item.productId);
 
       if (inventoryItems.length > 0) {
         try {
@@ -272,7 +316,11 @@ const updateInvoice = async (req, res) => {
 
       const resolveExisting = (item) => {
         if (item.id) return invoice.items.find((i) => i.id === item.id) ?? null;
-        if (item.productId) return invoice.items.find((i) => parseInt(i.productId) === parseInt(item.productId) && !matchedExistingIds.has(i.id)) ?? null;
+        // Match on the SKU/code. productId here is a varchar SKU (e.g. "P001"),
+        // so compare as strings, not parseInt. Items carry `productCode`;
+        // fall back to legacy `productId`.
+        const code = item.productCode ?? item.productId;
+        if (code != null) return invoice.items.find((i) => i.productId === String(code) && !matchedExistingIds.has(i.id)) ?? null;
         return null;
       };
 
@@ -290,9 +338,10 @@ const updateInvoice = async (req, res) => {
         const existing = resolveExisting(item);
         if (existing) matchedExistingIds.add(existing.id);
 
+        const itemCode = item.productCode ?? item.productId;
         const entity = existing
-          ? Object.assign(existing, { productId: item.productId ?? existing.productId, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, description: item.description || null })
-          : queryRunner.manager.create(InvoiceItem, { productId: item.productId ?? null, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, description: item.description || null, invoice: { id: invoice.id } });
+          ? Object.assign(existing, { productId: itemCode ?? existing.productId, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, description: item.description || null })
+          : queryRunner.manager.create(InvoiceItem, { productId: itemCode ?? null, productName: item.productName, price: item.price, qty: item.qty, discount: item.discount || 0, gstRate: item.gstRate, total: itemTotal, description: item.description || null, invoice: { id: invoice.id } });
 
         await queryRunner.manager.save(InvoiceItem, entity);
       }
