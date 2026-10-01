@@ -66,8 +66,12 @@ const getInventoryByProducts = (businessId, productIds) => new Promise((resolve)
             const map = {};
             for (const [productId, inv] of Object.entries(parsed.inventory)) {
               map[productId] = {
-                currentStock: inv.currentStock || 0,
-                lowStockThreshold: inv.lowStockThreshold || 0,
+                // Coerce to Number: the inventory service may serialize these
+                // from numeric/decimal DB columns as strings. Consumers expect
+                // numbers, so normalize here. Number(undefined/null) -> NaN, so
+                // guard with || 0.
+                currentStock: Number(inv.currentStock) || 0,
+                lowStockThreshold: Number(inv.lowStockThreshold) || 0,
                 lowStock: inv.isLowStock || false,
               };
             }

@@ -27,6 +27,20 @@ const computeIsLowStock = (record) => {
 };
 
 /**
+ * Normalize a saved/fetched inventory record for API responses.
+ * Decimal columns are returned by the driver as strings; coerce the numeric
+ * fields to Number so responses always expose them as numbers, not strings.
+ */
+const normalizeRecord = (record) => {
+  if (!record) return record;
+  return {
+    ...record,
+    currentStock: Number(record.currentStock) || 0,
+    lowStockThreshold: Number(record.lowStockThreshold) || 0,
+  };
+};
+
+/**
  * Upsert a single inventory record and log a transaction.
  * Uses the provided TypeORM manager (supports both regular repo and queryRunner).
  */
@@ -92,7 +106,7 @@ const upsertRecord = async (manager, entry, transactionType) => {
  * Uses plain repo — no wrapping transaction needed for one record.
  */
 const addSingle = async (entry) => {
-  return upsertRecord(inventoryRepo(), entry, "ADD");
+  return normalizeRecord(await upsertRecord(inventoryRepo(), entry, "ADD"));
 };
 
 /**
@@ -106,7 +120,7 @@ const addBulk = async (entries) => {
   try {
     const results = [];
     for (const entry of entries) {
-      results.push(await upsertRecord(queryRunner.manager, entry, "BULK_UPLOAD"));
+      results.push(normalizeRecord(await upsertRecord(queryRunner.manager, entry, "BULK_UPLOAD")));
     }
     await queryRunner.commitTransaction();
     return results;
@@ -127,7 +141,8 @@ const getAll = async (businessId) => {
   }
 
   const records = await inventoryRepo().find({ where: { businessId: validBusinessId } });
-  return records.map((r) => ({ ...r, isLowStock: computeIsLowStock(r) }));
+  // Decimal columns come back from the driver as strings — normalize to numbers.
+  return records.map((r) => ({ ...normalizeRecord(r), isLowStock: computeIsLowStock(r) }));
 };
 
 /** Get low-stock records for a business. */
@@ -138,13 +153,15 @@ const getLowStock = async (businessId) => {
     throw new Error(`Validation failed: ${validationError.message}`);
   }
 
-  return inventoryRepo()
+  const records = await inventoryRepo()
     .createQueryBuilder("inventory")
     .where("inventory.businessId = :businessId", { businessId: validBusinessId })
     .andWhere("inventory.lowStockThreshold > 0")
     .andWhere("inventory.currentStock <= inventory.lowStockThreshold")
     .andWhere("inventory.currentStock >= 0")
     .getMany();
+  // Decimal columns come back as strings — normalize numeric fields to numbers.
+  return records.map((r) => normalizeRecord(r));
 };
 
 /** Get a single inventory record by (businessId, productId). */
@@ -162,7 +179,8 @@ const getByProduct = async (businessId, productId) => {
     .andWhere('inventory.productId = :productId', { productId: validProductId })
     .getOne();
   if (!record) return null;
-  return { ...record, isLowStock: computeIsLowStock(record) };
+  // Decimal columns come back as strings — normalize to numbers.
+  return { ...normalizeRecord(record), isLowStock: computeIsLowStock(record) };
 };
 
 /**
@@ -204,8 +222,9 @@ const getByProducts = async (businessId, productIds) => {
   const map = {};
   for (const r of records) {
     map[r.productId] = {
-      currentStock: r.currentStock,
-      lowStockThreshold: r.lowStockThreshold,
+      // Decimal columns come back as strings — coerce to Number.
+      currentStock: Number(r.currentStock) || 0,
+      lowStockThreshold: Number(r.lowStockThreshold) || 0,
       uom: r.uom,
       isLowStock: computeIsLowStock(r),
     };
@@ -230,7 +249,7 @@ const setThreshold = async (businessId, productId, threshold) => {
     .getOne();
   if (!record) return null;
   record.lowStockThreshold = parseFloat(threshold);
-  return repo.save(record);
+  return normalizeRecord(await repo.save(record));
 };
 
 /**
@@ -275,7 +294,7 @@ const updateById = async (businessId, items) => {
       });
     }
 
-    updated.push(saved);
+    updated.push(normalizeRecord(saved));
   }
 
   return { updated };

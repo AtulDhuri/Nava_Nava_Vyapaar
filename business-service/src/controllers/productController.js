@@ -88,8 +88,8 @@ const getProducts = async (req, res) => {
     // Add inventory info to each product, matching on productCode.
     const productsWithInventory = products.map(product => ({
       ...product,
-      currentStock: inventoryData[product.productCode]?.currentStock || 0,
-      lowStockThreshold: inventoryData[product.productCode]?.lowStockThreshold || 0,
+      currentStock: Number(inventoryData[product.productCode]?.currentStock) || 0,
+      lowStockThreshold: Number(inventoryData[product.productCode]?.lowStockThreshold) || 0,
       lowStock: inventoryData[product.productCode]?.lowStock || false
     }));
     
