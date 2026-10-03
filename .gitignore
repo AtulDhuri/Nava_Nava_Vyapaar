@@ -1,53 +1,42 @@
-    # Node.js dependencies
-    node_modules/
-    npm-debug.log*
-    yarn-debug.log*
-    yarn-error.log*
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-    # TypeScript build outputs
-    dist/
-    build/
-    out/
+# TypeScript build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
 
-    # Logs
-    logs/
-    *.log
-    *.log.*
-    pids/
-    *.pid
-    *.seed
-    *.pid.lock
+# Logs
+logs/
+*.log
+*.log.*
+pids/
+*.pid
+*.seed
+*.pid.lock
 
-    # Runtime data
-    *.tsbuildinfo
+# Environment variables (keep the template)
 
-    # Environment variables
-    .env
-    .env.*
-    !.env.example
+# OS files
+.DS_Store
+Thumbs.db
 
-    # OS files
-    .DS_Store
-    Thumbs.db
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
 
-    # IDE/editor files
-    .vscode/
-    .idea/
-    *.swp
+# Coverage / testing
+coverage/
+.nyc_output/
+jest-coverage/
 
-    # Coverage / testing
-    coverage/
-    .nyc_output/
-    jest-coverage/
+# Docker
+docker-compose.override.yml
 
-    # Docker
-    *.dockerfile
-    docker-compose.override.yml
-
-    # Misc
-    *.tgz
-    render.yaml
-node_modules
-*.env.prod
-*.env
-*.yaml
+# Misc
+*.tgz

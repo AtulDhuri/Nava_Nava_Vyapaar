@@ -1,146 +1,105 @@
-# Naya Nava Vyapaar - Microservices Architecture
+# Naya Nava Vyapaar — Monolith
 
-A comprehensive business management platform with microservices architecture for inventory, billing, authentication, and business operations.
+A business management platform for authentication, business/product management, billing, and inventory. Previously five microservices, now a single Node.js + Express + TypeORM application backed by one PostgreSQL database.
 
-## Services Overview
+## Architecture
 
-- **API Gateway** (Port 3000) - Routes requests to appropriate services
-- **Auth Service** (Port 3001) - User authentication and authorization
-- **Business Service** (Port 3002) - Business and product management
-- **Billing Service** (Port 3003) - Invoice generation and billing
-- **Inventory Service** (Port 3004) - Inventory tracking and management
+One Express app (`src/server.js`) with four domain modules under `src/modules/`:
+
+```
+src/
+  server.js                 # single Express app, one DB init
+  config/database.js        # one PostgreSQL DataSource (all 7 entities)
+  middleware/               # verifyToken (JWT), error handlers
+  utils/                    # responseHandler, envLoader
+  modules/
+    auth/                   # users, signup/signin, token verify
+    business/               # business + products (+ businessService helpers)
+    billing/                # invoices + invoice items
+    inventory/              # inventory + transactions (+ inventoryService)
+```
+
+What used to be inter-service HTTP calls are now direct in-process function calls:
+- billing → business `resolveProductCodes` (numeric id → SKU code)
+- billing → inventory `deductStock` (stock deduction after invoice commit)
+- business → inventory `getByProducts` (product-list stock enrichment)
+
+The API gateway, the `/internal` HTTP endpoints, and the unused internal API key mechanism are removed.
 
 ## Prerequisites
 
-1. **Node.js** (v16 or higher)
-2. **PostgreSQL** (v12 or higher)
-3. **npm** package manager
+1. Node.js v18+
+2. PostgreSQL v12+
+3. npm
 
-## Setup Instructions
+## Setup
 
-### 1. Install Dependencies
-
+### 1. Install dependencies
 ```bash
-npm run install:all
+npm install
 ```
 
-### 2. Database Setup
-
-**Important:** Create PostgreSQL databases before starting services.
-
-#### Option A: Automated Setup (Windows)
-```bash
-# Run the setup script (requires PostgreSQL client tools)
-setup-databases.bat
-```
-
-#### Option B: Manual Setup
-Connect to PostgreSQL and run:
+### 2. Create the database
 ```sql
-CREATE DATABASE invoice_auth;
-CREATE DATABASE invoice_business; 
-CREATE DATABASE invoice_billing;
-CREATE DATABASE invoice_inventory;
+CREATE DATABASE naya_nava_vyapaar;
 ```
+Or run `setup-databases.sql`. Tables are created automatically on first start (TypeORM `synchronize`).
 
-### 3. Environment Configuration
+### 3. Configure environment
+Edit `.env` (local) or `.env.prod` (production) and set `DATABASE_URL` and the JWT secrets.
 
-Each service has its own `.env` file with database connection settings:
-- Default PostgreSQL credentials: `postgres:Root@localhost:5432`
-- Update `.env` files in each service directory if your PostgreSQL setup differs
-
-### 4. Start Services
-
-#### Development Mode (with auto-reload)
+### 4. Run
 ```bash
-npm run dev:all
+npm run dev     # development (auto-reload)
+npm start       # production-style start
 ```
 
-#### Production Mode
-```bash
-npm run start:all
-```
-
-#### Individual Services
-```bash
-npm run start:gateway    # API Gateway
-npm run start:auth       # Auth Service
-npm run start:business   # Business Service
-npm run start:billing    # Billing Service
-npm run start:inventory  # Inventory Service
-```
+The app listens on `PORT` (default 3000).
 
 ## API Endpoints
 
+All routes keep the same external paths as the previous gateway.
+
 ### Authentication
-- `POST /auth/register` - User registration
-- `POST /auth/login` - User login
-- `POST /auth/refresh` - Token refresh
+- `POST /api/auth/signup`
+- `POST /api/auth/signin`
+- `GET  /api/auth/verify`
 
-### Business Management
-- `GET /business/products` - Get products with inventory data
-- `POST /business/products` - Create products
-- `PUT /business/products/:id` - Update products
+### Business
+- `POST /api/businesses`
+- `GET  /api/businesses`
+- `PUT  /api/businesses`
 
-### Inventory Management
-- `GET /inventory` - Get inventory records
-- `POST /inventory` - Create/Update inventory
-- `DELETE /inventory/:id` - Delete inventory record
+### Products
+- `POST   /api/products`
+- `GET    /api/products` (enriched with `currentStock`, `lowStockThreshold`, `lowStock`)
+- `PUT    /api/products`
+- `DELETE /api/products`
 
 ### Billing
-- `POST /billing/invoices` - Create invoice (auto-deducts inventory)
-- `GET /billing/invoices` - Get invoices
+- `POST   /api/invoices` (auto-deducts inventory, best-effort)
+- `GET    /api/invoices`
+- `GET    /api/invoices/:id`
+- `PATCH  /api/invoices/received`
+- `PUT    /api/invoices/:id`
+- `DELETE /api/invoices/:id`
 
-## Features
+### Inventory
+- `POST   /api/inventory`
+- `GET    /api/inventory`
+- `GET    /api/inventory/low-stock`
+- `GET    /api/inventory/:productId`
+- `PUT    /api/inventory`
+- `DELETE /api/inventory`
+- `PATCH  /api/inventory/:productId/threshold`
 
-### Enhanced Product API
-The `GET /business/products` endpoint now includes:
-- `currentStock` - Current inventory quantity
-- `lowStock` - Boolean flag indicating low stock status
-
-### Inventory Integration
-- Automatic stock deduction during invoice creation
-- Low stock alerts and tracking
-- Real-time inventory updates
-
-### Microservice Communication
-- Internal APIs for service-to-service communication
-- JWT-based authentication for public APIs
-- Internal API key authentication for service communication
+### Health
+- `GET /health`
 
 ## Database Schema
 
-Each service maintains its own database:
-- `invoice_auth` - User authentication data
-- `invoice_business` - Business and product data  
-- `invoice_billing` - Invoice and billing data
-- `invoice_inventory` - Inventory tracking data
+Single database `naya_nava_vyapaar` with tables: `users`, `business`, `products`, `invoices`, `invoice_items`, `inventory`, `inventory_transactions`.
 
-## Troubleshooting
+## Deployment
 
-### Database Connection Issues
-1. Ensure PostgreSQL is running
-2. Verify database names exist (run `setup-databases.sql`)
-3. Check `.env` files for correct credentials
-
-### Service Startup Issues
-1. Run `npm run install:all` to ensure dependencies are installed
-2. Check that no other services are using the same ports
-3. Verify environment variables are set correctly
-
-### Inventory Service Issues
-- Database: Ensure `invoice_inventory` database exists
-- Dependencies: Verify `dotenv` and `axios` are installed
-- Internal communication: Check `INTERNAL_API_KEY` matches across services
-
-## Development
-
-### Adding New Features
-1. Create feature specs in `.kiro/specs/` directory
-2. Follow microservice patterns established in existing services
-3. Update API documentation and tests
-
-### Service Communication
-- Use internal APIs for service-to-service calls
-- Include `x-api-key` header for internal API authentication
-- Handle service unavailability gracefully with default values
+`render.yaml` defines a single web service. Set `DATABASE_URL` and JWT secrets as environment variables in the Render dashboard.

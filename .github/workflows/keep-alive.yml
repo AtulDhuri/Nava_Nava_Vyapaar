@@ -1,26 +1,18 @@
 name: keep-alive
 
-# Keeps every Render free-tier web service awake automatically. Runs on a cron
-# with NO manual action needed. Render sleeps a service after 15 min of no inbound
-# traffic; this pings each service's /health well under that window.
+# Keeps the Render free-tier web service awake. Render sleeps a service after
+# 15 min of no inbound traffic; this pings /health well under that window.
 #
-# Two layers of safety:
-#   1. Ping the gateway's /keepalive aggregator (fans out to all downstreams).
-#   2. Also ping each service's /health DIRECTLY, so if the gateway itself is
-#      mid-cold-start when the aggregator runs, the others still get kept awake.
-#
-# Setup (one time): add repo secrets for each service base URL (no trailing slash)
-#   under Settings > Secrets and variables > Actions:
-#     GATEWAY_URL, AUTH_URL, BUSINESS_URL, BILLING_URL, INVENTORY_URL
-# Missing secrets are skipped with a warning (the run does not fail).
+# Setup (one time): add a repo secret SERVICE_URL (no trailing slash) under
+# Settings > Secrets and variables > Actions, e.g. https://naya-nava-vyapaar.onrender.com
+# A missing secret fails the run with a clear message.
 
 on:
   schedule:
-    # Every 5 minutes (GitHub's minimum). Scheduled runs are BEST-EFFORT and can
-    # be delayed a few minutes under load; 5 min leaves margin under the 15-min
-    # sleep threshold even when a run slips.
+    # Every 5 minutes (GitHub's minimum). Scheduled runs are best-effort and may
+    # slip a few minutes under load; 5 min leaves margin under the 15-min sleep.
     - cron: "*/5 * * * *"
-  workflow_dispatch: {}   # optional manual trigger; not required for normal operation
+  workflow_dispatch: {}   # optional manual trigger
 
 concurrency:
   group: keep-alive
@@ -31,49 +23,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Ping all services (aggregator + direct, with jitter and cold-start tolerance)
+      - name: Ping /health (cold-start tolerant)
         env:
-          GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
-          AUTH_URL: ${{ secrets.AUTH_URL }}
-          BUSINESS_URL: ${{ secrets.BUSINESS_URL }}
-          BILLING_URL: ${{ secrets.BILLING_URL }}
-          INVENTORY_URL: ${{ secrets.INVENTORY_URL }}
+          SERVICE_URL: ${{ secrets.SERVICE_URL }}
         run: |
           set -u
-
-          # ping <label> <full-url>
-          # Tolerates a cold start: connect timeout 15s, total 70s (one ~30-60s
-          # wake), retry twice after the cold-start window. Never fails the run —
-          # a sleeping service still receives the request and starts waking; the
-          # next scheduled run confirms it.
-          ping() {
-            label="$1"; url="$2"
-            sleep $(( RANDOM % 20 ))   # jitter so pings don't all fire together
-            code=$(curl -sS -o /dev/null -w "%{http_code}" \
-              --connect-timeout 15 --max-time 70 \
-              --retry 2 --retry-delay 30 --retry-connrefused \
-              "$url" || echo "000")
-            case "$code" in
-              2*) echo "OK   $label -> $code   ($url)" ;;
-              *)  echo "::warning::WAKE $label -> $code (was likely asleep; cold start triggered)   ($url)" ;;
-            esac
-          }
-
-          any=0
-
-          # Layer 1: gateway aggregator (fans out to all downstreams server-side).
-          if [ -n "${GATEWAY_URL}" ]; then ping "gateway/keepalive" "${GATEWAY_URL%/}/keepalive"; any=1
-          else echo "::warning::GATEWAY_URL not set - skipping gateway aggregator"; fi
-
-          # Layer 2: direct /health per service (no single point of failure).
-          if [ -n "${GATEWAY_URL}"   ]; then ping "gateway"   "${GATEWAY_URL%/}/health";   any=1; fi
-          if [ -n "${AUTH_URL}"      ]; then ping "auth"      "${AUTH_URL%/}/health";      any=1; else echo "::warning::AUTH_URL not set";      fi
-          if [ -n "${BUSINESS_URL}"  ]; then ping "business"  "${BUSINESS_URL%/}/health";  any=1; else echo "::warning::BUSINESS_URL not set";  fi
-          if [ -n "${BILLING_URL}"   ]; then ping "billing"   "${BILLING_URL%/}/health";   any=1; else echo "::warning::BILLING_URL not set";   fi
-          if [ -n "${INVENTORY_URL}" ]; then ping "inventory" "${INVENTORY_URL%/}/health"; any=1; else echo "::warning::INVENTORY_URL not set"; fi
-
-          if [ "$any" -eq 0 ]; then
-            echo "::error::No service URL secrets are set. Add GATEWAY_URL, AUTH_URL, BUSINESS_URL, BILLING_URL, INVENTORY_URL."
+          if [ -z "${SERVICE_URL}" ]; then
+            echo "::error::SERVICE_URL secret is not set. Add it under Settings > Secrets and variables > Actions."
             exit 1
           fi
+
+          url="${SERVICE_URL%/}/health"
+          sleep $(( RANDOM % 20 ))   # small jitter
+          # Tolerate a cold start: connect timeout 15s, total 70s, retry twice
+          # through the ~30-60s wake window. A sleeping service still receives the
+          # request and starts waking; the next run confirms it.
+          code=$(curl -sS -o /dev/null -w "%{http_code}" \
+            --connect-timeout 15 --max-time 70 \
+            --retry 2 --retry-delay 30 --retry-connrefused \
+            "$url" || echo "000")
+
+          case "$code" in
+            2*) echo "OK   -> $code   ($url)" ;;
+            *)  echo "::warning::WAKE -> $code (was likely asleep; cold start triggered)   ($url)" ;;
+          esac
           echo "Keep-alive cycle complete."

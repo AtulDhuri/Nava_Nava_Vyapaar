@@ -1,404 +1,350 @@
-# Naya Nava Vyapaar - Complete API Documentation
+# Naya Nava Vyapaar — API Testing Guide (Monolith)
 
-## Table of Contents
-1. [Authentication](#authentication)
-2. [Products APIs](#products-apis)
-3. [Inventory APIs - Public](#inventory-apis---public)
-4. [Inventory APIs - Internal](#inventory-apis---internal)
-5. [Data Models](#data-models)
-6. [Response Format](#response-format)
+A **step-by-step** walkthrough you can follow top to bottom to test the whole
+system. Each step builds on the previous one (grab the token, then the
+`businessId`, then product SKUs, then invoice). Example data models a
+**boutique & accessories shop**.
 
-## Authentication
+- Base URL (local): `http://localhost:3000`
+- Auth: `signup`/`signin` are public; everything else needs `Authorization: Bearer <token>`.
+- Most data endpoints are scoped by `businessId` (a **query parameter**, except invoice-create which takes it in the body).
 
-All public APIs require JWT authentication. First, get your token:
+> **Frontend migration note:** all paths are identical to the old microservices/
+> gateway. The only change is the base URL — point it at this one host.
 
-```bash
-# Login to get JWT token
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "your-email@example.com",
-    "password": "your-password"
-  }'
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "statusMessage": "Login successful",
-  "displayMessage": "Welcome back!",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": { "id": 1, "email": "user@example.com" }
-}
-```
-
-Use the `token` value as `Bearer YOUR_JWT_TOKEN` in subsequent requests.
+> **Shell note:**
+> - **macOS/Linux / Git Bash:** commands work as written (they use a `TOKEN` variable).
+> - **Windows PowerShell:** use `curl.exe` (not the `curl` alias), set variables with `$TOKEN="..."`, and reference them as `$TOKEN`. A PowerShell-native version of each call is noted where it differs.
 
 ---
 
-## Products APIs
+## Prerequisites
 
-### 1. Add Product (Single)
+1. Install deps and start the server:
+   ```bash
+   npm install
+   npm run dev
+   ```
+2. Wait for: `✓ Database connected successfully` and `Naya Nava Vyapaar running on port 3000`.
+3. Prefer a one-shot automated run instead of manual steps? Use `npm run test:e2e` (see the last section). The steps below are the manual equivalent.
+
+---
+
+## Step 0 — Health check
+
+Confirm the server is up and the DB is connected.
+
+```bp
+```
+
+Expect `"status":"success"` and `"dbConnected":true`. If `dbConnected` is false, fix the DB connection before continuing.
+
+---
+
+## Step 1 — Register a user (signup)
+
 ```bash
-curl -X POST "http://localhost:3000/api/products?businessId=1" \
+curl -X POST http://localhost:3000/api/auth/signup \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
-    "productCode": "PROD001",
-    "name": "Sample Product",
-    "description": "This is a sample product description",
-    "price": 99.99,
-    "purchasePrice": 75.00,
-    "uom": "pieces",
-    "gstRate": 18,
-    "category": "Electronics"
+    "firstName": "Meera",
+    "lastName": "Shah",
+    "mobileNo": "9876543210",
+    "password": "secret123"
   }'
 ```
 
-### 2. Add Products (Bulk)
+Expect `201`. If you've run this before, you'll get `409 mobile already registered` — that's fine, just continue to signin with the same credentials (or change `mobileNo`).
+
+---
+
+## Step 2 — Log in and capture the token
+
 ```bash
-curl -X POST "http://localhost:3000/api/products?businessId=1" \
+curl -X POST http://localhost:3000/api/auth/signin \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '[
-    {
-      "productCode": "PROD001",
-      "name": "Product One",
-      "description": "First product description",
-      "price": 99.99,
-      "purchasePrice": 75.00,
-      "uom": "pieces",
-      "gstRate": 18,
-      "category": "Electronics"
-    },
-    {
-      "productCode": "PROD002",
-      "name": "Product Two",
-      "description": "Second product description",
-      "price": 149.99,
-      "purchasePrice": 120.00,
-      "uom": "kg",
-      "gstRate": 12,
-      "category": "Consumables"
-    }
-  ]'
+  -d '{ "mobileNo": "9876543210", "password": "secret123" }'
 ```
 
-### 3. Get All Products
+Copy the `token` from the response and store it:
+
 ```bash
-curl -X GET "http://localhost:3000/api/products?businessId=1" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+# macOS/Linux / Git Bash
+TOKEN="paste-the-token-here"
+```
+```powershell
+# Windows PowerShell
+$TOKEN="paste-the-token-here"
 ```
 
-### 4. Search Products
+Quick sanity check that the token works:
 ```bash
-curl -X GET "http://localhost:3000/api/products?businessId=1&search=Product" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+curl http://localhost:3000/api/auth/verify -H "Authorization: Bearer $TOKEN"
 ```
+Expect `"valid":true`.
 
-### 5. Update Product (Single)
+---
+
+## Step 3 — Create a business and capture its id
+
 ```bash
-curl -X PUT "http://localhost:3000/api/products?businessId=1" \
+curl -X POST http://localhost:3000/api/businesses \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
-    "id": 1,
-    "name": "Updated Product Name",
-    "description": "Updated product description",
-    "price": 119.99,
-    "purchasePrice": 85.00,
-    "gstRate": 18,
-    "category": "Updated Category"
+    "name": "Meera Boutique & Accessories",
+    "address": "24 Fashion Street, Bandra West, Mumbai",
+    "gstNumber": "27ABCDE1234F1Z5",
+    "contactNumber": "9876543210"
   }'
 ```
 
-### 6. Update Products (Bulk)
+From the response, note `business.id`. Store it (used in every step below):
 ```bash
-curl -X PUT "http://localhost:3000/api/products?businessId=1" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '[
-    {
-      "id": 1,
-      "name": "Updated Product One",
-      "price": 109.99,
-      "purchasePrice": 80.00
-    },
-    {
-      "id": 2,
-      "name": "Updated Product Two",
-      "price": 159.99,
-      "purchasePrice": 125.00
-    }
-  ]'
+BUSINESS_ID=1        # replace with the id you got
+```
+```powershell
+$BUSINESS_ID=1
 ```
 
-### 7. Delete Product (Single)
+Verify:
 ```bash
-curl -X DELETE "http://localhost:3000/api/products?businessId=1" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "id": 1
-  }'
-```
-
-### 8. Delete Products (Bulk)
-```bash
-curl -X DELETE "http://localhost:3000/api/products?businessId=1" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '[
-    {"id": 1},
-    {"id": 2}
-  ]'
+curl http://localhost:3000/api/businesses -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
 
-## Inventory APIs - Public
+## Step 4 — Add products
 
-*All inventory APIs require JWT authentication and go through the API Gateway*
+Add three boutique items. Required per item: `productCode`, `name`, `price`, `uom`, `gstRate`.
 
-### 1. Add Inventory Stock (Single Item)
 ```bash
-curl -X POST http://localhost:3000/api/inventory \
+curl -X POST "http://localhost:3000/api/products?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '[{
-    "productId": 1,
-    "businessId": 1,
-    "quantity": 100,
-    "lowStockThreshold": 10,
-    "uom": "pieces",
-    "note": "Initial stock"
-  }]'
-```
-
-### 2. Add Inventory Stock (Bulk)
-```bash
-curl -X POST http://localhost:3000/api/inventory \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '[
-    {
-      "productId": 1,
-      "businessId": 1,
-      "quantity": 100,
-      "lowStockThreshold": 10,
-      "uom": "pieces",
-      "note": "Product 1 initial stock"
-    },
-    {
-      "productId": 2,
-      "businessId": 1,
-      "quantity": 50,
-      "lowStockThreshold": 5,
-      "uom": "kg",
-      "note": "Product 2 initial stock"
-    }
+    { "productCode": "KUR-ANRK-M", "name": "Anarkali Kurti (Maroon, M)", "category": "Apparel", "price": 1499, "purchasePrice": 850, "uom": "pcs", "gstRate": 12, "description": "Rayon anarkali kurti, size M" },
+    { "productCode": "DUP-SILK-RED", "name": "Banarasi Silk Dupatta (Red)", "category": "Apparel", "price": 899, "purchasePrice": 500, "uom": "pcs", "gstRate": 5, "description": "Pure silk dupatta with zari border" },
+    { "productCode": "BAG-SLING-TAN", "name": "Leather Sling Bag (Tan)", "category": "Accessories", "price": 1799, "purchasePrice": 1100, "uom": "pcs", "gstRate": 18, "description": "Genuine leather sling bag" }
   ]'
 ```
 
-### 3. Get All Inventory for Business
-```bash
-curl -X GET "http://localhost:3000/api/inventory?businessId=1" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### 4. Get Low Stock Items
-```bash
-curl -X GET "http://localhost:3000/api/inventory/low-stock?businessId=1" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### 5. Get Inventory by Product ID
-```bash
-curl -X GET "http://localhost:3000/api/inventory/1?businessId=1" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### 6. Update Inventory Records
-```bash
-curl -X PUT "http://localhost:3000/api/inventory?businessId=1" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '[{
-    "id": 1,
-    "currentStock": 150,
-    "lowStockThreshold": 15,
-    "uom": "pieces",
-    "note": "Stock adjustment"
-  }]'
-```
-
-### 7. Update Low Stock Threshold Only
-```bash
-curl -X PATCH "http://localhost:3000/api/inventory/1/threshold?businessId=1" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "lowStockThreshold": 20
-  }'
-```
-
-### 8. Delete Inventory Records
-```bash
-curl -X DELETE "http://localhost:3000/api/inventory?businessId=1" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '[{"id": 1}, {"id": 2}]'
-```
+Expect `201` with the saved products. The SKUs (`productCode`) are what inventory and invoices key on.
 
 ---
 
-## Inventory APIs - Internal
+## Step 5 — Add stock for those products
 
-*These are for service-to-service communication only, no JWT required*
+Body is **always an array**. Required per entry: `productId` (the SKU), `businessId`, `quantity` (> 0).
 
-### 9. Deduct Stock (Called by Billing Service)
 ```bash
-curl -X POST http://localhost:3004/internal/deduct-stock \
+curl -X POST "http://localhost:3000/api/inventory" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[
+    { "productId": "KUR-ANRK-M", "businessId": '"$BUSINESS_ID"', "quantity": 40, "uom": "pcs", "lowStockThreshold": 5 },
+    { "productId": "DUP-SILK-RED", "businessId": '"$BUSINESS_ID"', "quantity": 60, "uom": "pcs", "lowStockThreshold": 8 },
+    { "productId": "BAG-SLING-TAN", "businessId": '"$BUSINESS_ID"', "quantity": 25, "uom": "pcs", "lowStockThreshold": 4 }
+  ]'
+```
+> PowerShell: replace `'"$BUSINESS_ID"'` with the literal number (e.g. `1`) inside the JSON, since the bash quoting trick doesn't apply.
+
+Expect `201`. Each entry shows `currentStock`.
+
+---
+
+## Step 6 — Verify stock shows up on products
+
+```bash
+curl "http://localhost:3000/api/products?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Each product should now carry `currentStock`, `lowStockThreshold`, and `lowStock`. The kurti should read `currentStock: 40`.
+
+---
+
+## Step 7 — Create an invoice (auto-deducts stock)
+
+`businessId` goes in the **body** here. Buying 2 kurtis and 1 dupatta.
+
+```bash
+curl -X POST "http://localhost:3000/api/invoices" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "businessId": 1,
-    "billNo": "INV-001",
+    "businessId": '"$BUSINESS_ID"',
+    "customerName": "Priya Nair",
+    "customerMobile": "9000000000",
+    "customerAddress": "12 Hill Road, Bandra West",
+    "discount": 100,
+    "received": 2000,
     "items": [
-      {
-        "productId": 1,
-        "qty": 5
-      },
-      {
-        "productId": 2,
-        "qty": 2
-      }
+      { "productCode": "KUR-ANRK-M", "productName": "Anarkali Kurti (Maroon, M)", "price": 1499, "qty": 2, "discount": 0, "gstRate": 12 },
+      { "productCode": "DUP-SILK-RED", "productName": "Banarasi Silk Dupatta (Red)", "price": 899, "qty": 1, "discount": 0, "gstRate": 5 }
     ]
   }'
 ```
 
-### 10. Get Inventory by Product (Internal)
+Expect `201` with `"inventoryDeducted": true`. Note the `invoice.id` and `invoice.billNo`. Store the id:
 ```bash
-curl -X GET "http://localhost:3004/internal/inventory/1?businessId=1"
+INVOICE_ID=1
 ```
 
 ---
 
-## Data Models
+## Step 8 — Confirm stock was deducted
 
-### Product Model
+The kurti had 40, you sold 2, so it should now be 38:
+```bash
+curl "http://localhost:3000/api/inventory/KUR-ANRK-M?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+Expect `currentStock: 38`. The dupatta (`DUP-SILK-RED`) should be 59.
+
+---
+
+## Step 9 — List and fetch invoices
+
+```bash
+# all invoices
+curl "http://localhost:3000/api/invoices?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN"
+
+# filter by status (Unpaid | Partially Paid | Paid)
+curl "http://localhost:3000/api/invoices?businessId=$BUSINESS_ID&status=Partially%20Paid" \
+  -H "Authorization: Bearer $TOKEN"
+
+# one invoice with its items
+curl "http://localhost:3000/api/invoices/$INVOICE_ID?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Step 10 — Record a payment (update received)
+
+```bash
+curl -X PATCH "http://localhost:3000/api/invoices/received?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[{ "id": '"$INVOICE_ID"', "received": 4000 }]'
+```
+`balance` and `status` recompute (e.g. to `Paid`).
+
+---
+
+## Step 11 — Low-stock check
+
+Drop the sling bag threshold test by selling it down, or just view current low-stock items:
+```bash
+curl "http://localhost:3000/api/inventory/low-stock?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Step 12 — Cleanup (optional)
+
+```bash
+# delete the invoice
+curl -X DELETE "http://localhost:3000/api/invoices/$INVOICE_ID?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN"
+
+# delete a product (needs its numeric id — get it from the products list)
+curl -X DELETE "http://localhost:3000/api/products?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[{ "id": 1 }]'
+
+# delete an inventory row (needs its id — from the inventory list)
+curl -X DELETE "http://localhost:3000/api/inventory?businessId=$BUSINESS_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '[{ "id": 5 }]'
+```
+
+You've now exercised the full flow: **auth → business → products → inventory → invoice → payment**.
+
+---
+---
+
+# Full Endpoint Reference
+
+Grouped by area. All paths are unchanged from the microservices version.
+
+## Auth (`/api/auth`) — public
+| Method | Path | Body / notes |
+|--------|------|--------------|
+| POST | `/api/auth/signup` | `{ firstName, lastName, mobileNo, password }` → 201 |
+| POST | `/api/auth/signin` | `{ mobileNo, password }` → `{ token, ... }` |
+| GET | `/api/auth/verify` | header `Authorization: Bearer <token>` → `{ valid, user }` |
+
+## Businesses (`/api/businesses`) — token required, owner from token
+| Method | Path | Body / notes |
+|--------|------|--------------|
+| POST | `/api/businesses` | `{ name, address?, gstNumber?, contactNumber? }` (only `name` required) |
+| GET | `/api/businesses` | list businesses for the logged-in user |
+| PUT | `/api/businesses` | single `{ id, ... }` or array; each needs `id` |
+
+## Products (`/api/products`) — token required, `?businessId=`
+| Method | Path | Body / notes |
+|--------|------|--------------|
+| POST | `/api/products?businessId=` | single or array; required: `productCode, name, price, uom, gstRate` |
+| GET | `/api/products?businessId=` | optional `&search=`; enriched with `currentStock, lowStockThreshold, lowStock` |
+| PUT | `/api/products?businessId=` | single or array; each needs `id` |
+| DELETE | `/api/products?businessId=` | single or array of `{ id }` |
+
+## Inventory (`/api/inventory`) — token required, `?businessId=`, `productId` = SKU
+| Method | Path | Body / notes |
+|--------|------|--------------|
+| POST | `/api/inventory` | **array**; per entry `{ productId, businessId, quantity>0, uom?, lowStockThreshold? }` |
+| GET | `/api/inventory?businessId=` | all records (`isLowStock` included) |
+| GET | `/api/inventory/low-stock?businessId=` | low-stock records |
+| GET | `/api/inventory/:productId?businessId=` | one record by SKU (404 if none) |
+| PUT | `/api/inventory?businessId=` | array; each needs row `id`; set `uom/lowStockThreshold/currentStock` |
+| PATCH | `/api/inventory/:productId/threshold?businessId=` | `{ lowStockThreshold }` |
+| DELETE | `/api/inventory?businessId=` | array of `{ id }` |
+
+## Invoices (`/api/invoices`) — token required
+| Method | Path | Body / notes |
+|--------|------|--------------|
+| POST | `/api/invoices` | `businessId` in **body**; `{ businessId, customerName, items[], discount?, received?, ... }`; auto-deducts stock |
+| GET | `/api/invoices?businessId=` | optional `&status=`; list |
+| GET | `/api/invoices/:id?businessId=` | one invoice with items |
+| PATCH | `/api/invoices/received?businessId=` | single or array; each `{ id, received }` |
+| PUT | `/api/invoices/:id?businessId=` | update customer fields and/or items |
+| DELETE | `/api/invoices/:id?businessId=` | delete invoice |
+
+## Response envelope
 ```json
-{
-  "id": 1,
-  "businessId": 1,
-  "productCode": "PROD001",
-  "name": "Sample Product",
-  "category": "Electronics",
-  "price": 99.99,
-  "purchasePrice": 75.00,
-  "uom": "pieces",
-  "gstRate": 18.00,
-  "description": "Product description",
-  "currentStock": 100,
-  "lowStock": false
-}
+{ "status": "success | error", "statusMessage": "...", "displayMessage": "..." }
 ```
+plus endpoint-specific fields.
 
-### Inventory Model
-```json
-{
-  "id": 1,
-  "businessId": 1,
-  "productId": 1,
-  "currentStock": 100.000,
-  "lowStockThreshold": 10.000,
-  "uom": "pieces",
-  "lastUpdatedAt": "2024-01-15T10:30:00.000Z",
-  "createdAt": "2024-01-15T09:00:00.000Z",
-  "isLowStock": false
-}
-```
+## Status codes
+| Code | Meaning |
+|------|---------|
+| 200 | OK |
+| 201 | Created |
+| 400 | Validation error |
+| 401 | Missing/invalid credentials or no token |
+| 403 | Invalid or expired token |
+| 404 | Not found |
+| 409 | Conflict (e.g. mobile already registered) |
+| 429 | Too many requests (auth rate limit) |
+| 500 | Server error |
+| 503 | Database not ready |
 
-### Inventory Transaction Model
-```json
-{
-  "id": 1,
-  "businessId": 1,
-  "productId": 1,
-  "type": "ADD",
-  "quantity": 50.000,
-  "referenceId": "INV-001",
-  "note": "Stock replenishment",
-  "createdAt": "2024-01-15T10:30:00.000Z"
-}
-```
+## Data model quick reference
+- **User** → `users`: id, firstName, lastName, mobileNo (unique), password, timestamps
+- **Business** → `business`: id, userId, name, address, gstNumber, contactNumber
+- **Product** → `products`: id, businessId, productCode (unique SKU), name, category, price, purchasePrice, uom, gstRate, description
+- **Invoice** → `invoices`: id, businessId, billNo (unique), customer fields, totalPrice, discount, received, balance, status, date; has many **items**
+- **InvoiceItem** → `invoice_items`: id, productId (SKU), productName, price, qty, discount, gstRate, total, description
+- **Inventory** → `inventory`: id, businessId, productId (SKU), currentStock, lowStockThreshold, uom, timestamps; unique (businessId, productId)
+- **InventoryTransaction** → `inventory_transactions`: id, businessId, productId, type (ADD/BULK_UPLOAD/ADJUSTMENT/DEDUCT), quantity, referenceId (billNo), note, createdAt
 
----
-
-## Response Format
-
-All APIs follow a consistent response format:
-
-### Success Response
-```json
-{
-  "status": "success",
-  "statusMessage": "Operation completed successfully",
-  "displayMessage": "User-friendly message",
-  "data": { /* relevant data */ }
-}
-```
-
-### Error Response
-```json
-{
-  "status": "error",
-  "statusMessage": "Technical error message",
-  "displayMessage": "User-friendly error message"
-}
-```
-
----
-
-## Field Requirements
-
-### Product Fields
-- **Required**: `productCode`, `name`, `price`, `uom`, `gstRate`
-- **Optional**: `description` (max 5000 chars), `purchasePrice`, `category`
-
-### Inventory Fields
-- **Required**: `productId`, `businessId`, `quantity`
-- **Optional**: `lowStockThreshold`, `uom`, `note`
-
----
-
-## Transaction Types
-
-| Type | Description |
-|------|-------------|
-| `ADD` | Manual stock additions |
-| `DEDUCT` | Stock reductions (sales) |
-| `ADJUSTMENT` | Direct stock corrections |
-| `BULK_UPLOAD` | Bulk inventory operations |
-
----
-
-## Port Configuration
-
-- **API Gateway (Public)**: http://localhost:3000
-- **Auth Service**: http://localhost:3001
-- **Business Service**: http://localhost:3002
-- **Billing Service**: http://localhost:3003
-- **Inventory Service (Direct)**: http://localhost:3004
-
----
-
-## Notes
-
-1. All public APIs require JWT authentication via `Authorization: Bearer TOKEN`
-2. Internal APIs are for service-to-service communication only
-3. Arrays are required for POST/PUT/DELETE operations, even for single items
-4. `businessId` is required for all operations and should be passed as query parameter
-5. Inventory operations automatically log transactions for audit trails
-6. Low stock detection is automatic based on `currentStock <= lowStockThreshold`
-7. Products API automatically includes current stock information from inventory service
+## GST / SKU notes (boutique)
+- Example GST slabs: 5% apparel ≤ ₹1000, 12% apparel > ₹1000, 18% accessories — set to the shop's real tax config.
+- SKU convention used: `<TYPE>-<STYLE/MATERIAL>-<VARIANT>`, e.g. `KUR-ANRK-M`, `DUP-SILK-RED`, `BAG-SLING-TAN`. Any alphanumeric string with `-`/`_` is valid.
