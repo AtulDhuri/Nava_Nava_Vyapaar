@@ -74,7 +74,7 @@ const upsertRecord = async (manager, entry, transactionType) => {
       uom: uom || null,
     });
   } else {
-    record.currentStock = parseFloat(record.currentStock) + parseFloat(quantity);
+    record.currentStock = parseFloat(quantity);
     if (lowStockThreshold != null) record.lowStockThreshold = parseFloat(lowStockThreshold);
     if (uom !== undefined) record.uom = uom;
   }
